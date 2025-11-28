@@ -7,11 +7,11 @@
   "frame": {
     "version": "1",
     "name": "SnakeRush",
-    "iconUrl": "https://your-domain.com/icon.png",
+    "iconUrl": "https://your-domain.com/logo.png",
     "homeUrl": "https://your-domain.com",
-    "imageUrl": "https://your-domain.com/splash.png",
+    "imageUrl": "https://your-domain.com/logo.png",
     "buttonTitle": "Play SnakeRush",
-    "splashImageUrl": "https://your-domain.com/splash.png",
+    "splashImageUrl": "https://your-domain.com/logo.png",
     "splashBackgroundColor": "#121212",
     "webhookUrl": "https://your-domain.com/api/webhook"
   }
