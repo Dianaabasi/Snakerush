@@ -1,180 +1,3 @@
-// 'use client';
-
-// import { useEffect, useState } from 'react';
-// import sdk from '@farcaster/frame-sdk';
-// import { doc, getDoc } from 'firebase/firestore';
-// import { db } from '@/lib/firebase';
-// import { getCurrentWeekID } from '@/lib/utils';
-// import Link from 'next/link';
-// import Image from 'next/image'; 
-// import TicketButton from '@/components/TicketButton';
-// import { House, Trophy, User } from 'lucide-react'; 
-// import ThemeToggle from '@/components/ThemeToggle'; 
-
-// // Helper type to extract the context type directly from the SDK
-// type FrameContext = Awaited<typeof sdk.context>;
-
-// export default function HomePage() {
-//   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
-//   const [context, setContext] = useState<FrameContext>();
-//   const [hasTicket, setHasTicket] = useState(false);
-//   const [loadingTicket, setLoadingTicket] = useState(true);
-
-//   // 1. Initialize Farcaster SDK
-//   useEffect(() => {
-//     const loadContext = async () => {
-//       const context = await sdk.context;
-//       setContext(context);
-//       sdk.actions.ready();
-//       setIsSDKLoaded(true);
-//     };
-//     if (sdk && !isSDKLoaded) {
-//       loadContext();
-//     }
-//   }, [isSDKLoaded]);
-
-//   // 2. Check Firebase for existing ticket
-//   const checkTicketStatus = async () => {
-//     if (!context?.user?.fid) return;
-
-//     setLoadingTicket(true);
-//     const weekID = getCurrentWeekID();
-//     const ticketDocID = `${context.user.fid}_${weekID}`;
-
-//     try {
-//       const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
-//       if (ticketSnap.exists() && ticketSnap.data().paid) {
-//         setHasTicket(true);
-//       }
-//     } catch (error) {
-//       console.error("Error checking ticket:", error);
-//     } finally {
-//       setLoadingTicket(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (context?.user?.fid) {
-//       checkTicketStatus();
-//     }
-//   }, [context]);
-
-//   if (!isSDKLoaded || loadingTicket) {
-//     return (
-//       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse">
-//         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
-      
-//       {/* THEME TOGGLE (Top Right) */}
-//       <div className="absolute top-0 right-0 z-20">
-//         <ThemeToggle />
-//       </div>
-
-//       {/* HEADER LOGO */}
-//       <div className="mt-8 mb-2 flex flex-col items-center">
-//         <div className="relative w-64 h-24">
-//           <Image 
-//             src="/logo.png" 
-//             alt="SnakeRush Logo" 
-//             fill
-//             className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]"
-//             priority
-//           />
-//         </div>
-//         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
-//           Weekly Campaign: 
-//           <span className="ml-2 text-green-800 dark:text-neon-green font-black">
-//             {getCurrentWeekID()}
-//           </span>
-//         </p>
-//       </div>
-
-//       {/* INSTRUCTIONS CARD - FORCED DARK STYLE */}
-//       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
-//         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-//           How to Play
-//         </h2>
-//         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
-//           <li>Get the highest score for the day.</li>
-//           <li>
-//             <span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.
-//           </li>
-//           <li>
-//             <span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.
-//           </li>
-//         </ul>
-//       </div>
-
-//       {/* ACTION AREA (TICKET / JOIN) */}
-//       <div className="w-full max-w-sm flex flex-col gap-4">
-//         {hasTicket ? (
-//           <div className="animate-fade-in">
-//             <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
-//               ✅ TICKET ACTIVE
-//             </div>
-            
-//             <Link href="/game" className="block w-full">
-//               <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
-//                 JOIN GAME
-//               </button>
-//             </Link>
-//           </div>
-//         ) : (
-//           <div className="animate-fade-in">
-//              {context?.user?.fid && (
-//                <TicketButton 
-//                  fid={context.user.fid} 
-//                  onTicketPurchased={() => checkTicketStatus()} 
-//                />
-//              )}
-//             {!hasTicket && (
-//                <button className="w-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-400 font-bold py-4 rounded-xl mt-4 cursor-not-allowed opacity-50 border border-gray-300 dark:border-transparent">
-//                  JOIN GAME (LOCKED)
-//                </button>
-//             )}
-//           </div>
-//         )}
-//       </div>
-
-//       {/* BOTTOM NAVIGATION BAR */}
-//       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
-//         <div className="max-w-md mx-auto flex justify-around items-center">
-          
-//           {/* HOME (Active) */}
-//           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
-//             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
-//             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
-//           </Link>
-
-//           {/* RANK */}
-//           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
-//             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
-//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
-//           </Link>
-
-//           {/* PROFILE */}
-//           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
-//             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-//                {context?.user?.pfpUrl ? (
-//                  <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
-//                ) : (
-//                  <User size={16} className="text-gray-500 dark:text-gray-400" />
-//                )}
-//             </div>
-//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
-//           </Link>
-
-//         </div>
-//       </nav>
-//     </div>
-//   );
-// }
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -188,7 +11,7 @@ import TicketButton from '@/components/TicketButton';
 import { House, Trophy, User } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
 
-// Helper to handle SDK types safely
+// Helper type to extract the context type directly from the SDK
 type FrameContext = Awaited<typeof sdk.context>;
 
 export default function HomePage() {
@@ -197,56 +20,21 @@ export default function HomePage() {
   const [hasTicket, setHasTicket] = useState(false);
   const [loadingTicket, setLoadingTicket] = useState(true);
 
-  // --- 1. Initialize Farcaster SDK (With Dev Bypass) ---
+  // 1. Initialize Farcaster SDK
   useEffect(() => {
-    let isMounted = true;
-
-    const init = async () => {
-      // PATH A: Development Mode (Localhost) -> Force Mock Data immediately
-      if (process.env.NODE_ENV === 'development') {
-        console.log("🚧 DEV MODE: Skipping Farcaster SDK connection");
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        if (isMounted) {
-          setContext({
-            user: {
-              fid: 888888,
-              displayName: "Local Dev",
-              username: "dev_user",
-              pfpUrl: "https://placehold.co/100" 
-            },
-            client: { clientFid: 1, added: true }
-          } as unknown as FrameContext);
-          
-          setIsSDKLoaded(true);
-          setHasTicket(true); 
-          setLoadingTicket(false); 
-        }
-        return;
-      }
-
-      // PATH B: Production Mode
-      try {
-        const context = await sdk.context;
-        if (isMounted) {
-          setContext(context);
-          sdk.actions.ready();
-          setIsSDKLoaded(true);
-        }
-      } catch (error) {
-        console.error("SDK Load Error:", error);
-      }
+    const loadContext = async () => {
+      const context = await sdk.context;
+      setContext(context);
+      sdk.actions.ready();
+      setIsSDKLoaded(true);
     };
+    if (sdk && !isSDKLoaded) {
+      loadContext();
+    }
+  }, [isSDKLoaded]);
 
-    init();
-
-    return () => { isMounted = false; };
-  }, []); 
-
-  // --- 2. Check Firebase for existing ticket ---
+  // 2. Check Firebase for existing ticket
   const checkTicketStatus = async () => {
-    if (process.env.NODE_ENV === 'development') return;
     if (!context?.user?.fid) return;
 
     setLoadingTicket(true);
@@ -271,14 +59,10 @@ export default function HomePage() {
     }
   }, [context]);
 
-  // --- RENDER ---
   if (!isSDKLoaded || loadingTicket) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse">
         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
-        {process.env.NODE_ENV === 'development' && (
-           <p className="text-xs text-gray-500">Waiting for Dev Bypass...</p>
-        )}
       </div>
     );
   }
@@ -293,7 +77,7 @@ export default function HomePage() {
 
       {/* HEADER LOGO */}
       <div className="mt-8 mb-2 flex flex-col items-center">
-        <div className="relative w-80 h-40">
+        <div className="relative w-64 h-24">
           <Image 
             src="/logo.png" 
             alt="SnakeRush Logo" 
@@ -302,10 +86,8 @@ export default function HomePage() {
             priority
           />
         </div>
-        {/* LIGHT MODE: Dark Grey Text | DARK MODE: Light Grey Text */}
         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
           Weekly Campaign: 
-          {/* LIGHT MODE: Dark Green Text | DARK MODE: Neon Green Text */}
           <span className="ml-2 text-green-800 dark:text-neon-green font-black">
             {getCurrentWeekID()}
           </span>
@@ -313,46 +95,30 @@ export default function HomePage() {
       </div>
 
       {/* INSTRUCTIONS CARD - FORCED DARK STYLE */}
-      {/* We use bg-[#1E1E24] explicitly to ignore the light mode variable switch */}
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
-        
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           How to Play
         </h2>
-        
         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
           <li>Get the highest score for the day.</li>
-          
-          {/* EASY MODE: Forced Neon Green Hex */}
           <li>
             <span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.
           </li>
-          
-          {/* HARD MODE: Forced Danger Red Hex */}
           <li>
             <span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.
           </li>
         </ul>
       </div>
 
-      {/* DEV BANNER */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-500 px-4 py-2 rounded-lg text-xs font-mono border border-amber-300 dark:border-yellow-700 font-bold">
-          🚧 DEV MODE: Ticket Bypassed
-        </div>
-      )}
-
-      {/* ACTION AREA */}
+      {/* ACTION AREA (TICKET / JOIN) */}
       <div className="w-full max-w-sm flex flex-col gap-4">
         {hasTicket ? (
           <div className="animate-fade-in">
-            {/* TICKET ACTIVE: Light Green BG/Dark Text (Light) vs Transparent/Neon (Dark) */}
             <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
               ✅ TICKET ACTIVE
             </div>
             
             <Link href="/game" className="block w-full">
-              {/* JOIN BUTTON: Dark Green/White Text (Light) vs Neon Green/Black Text (Dark) */}
               <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
                 JOIN GAME
               </button>
@@ -408,3 +174,237 @@ export default function HomePage() {
     </div>
   );
 }
+
+// 'use client';
+
+// import { useEffect, useState } from 'react';
+// import sdk from '@farcaster/frame-sdk';
+// import { doc, getDoc } from 'firebase/firestore';
+// import { db } from '@/lib/firebase';
+// import { getCurrentWeekID } from '@/lib/utils';
+// import Link from 'next/link';
+// import Image from 'next/image'; 
+// import TicketButton from '@/components/TicketButton';
+// import { House, Trophy, User } from 'lucide-react'; 
+// import ThemeToggle from '@/components/ThemeToggle'; 
+
+// // Helper to handle SDK types safely
+// type FrameContext = Awaited<typeof sdk.context>;
+
+// export default function HomePage() {
+//   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
+//   const [context, setContext] = useState<FrameContext>();
+//   const [hasTicket, setHasTicket] = useState(false);
+//   const [loadingTicket, setLoadingTicket] = useState(true);
+
+//   // --- 1. Initialize Farcaster SDK (With Dev Bypass) ---
+//   useEffect(() => {
+//     let isMounted = true;
+
+//     const init = async () => {
+//       // PATH A: Development Mode (Localhost) -> Force Mock Data immediately
+//       if (process.env.NODE_ENV === 'development') {
+//         console.log("🚧 DEV MODE: Skipping Farcaster SDK connection");
+        
+//         await new Promise(resolve => setTimeout(resolve, 500));
+        
+//         if (isMounted) {
+//           setContext({
+//             user: {
+//               fid: 888888,
+//               displayName: "Local Dev",
+//               username: "dev_user",
+//               pfpUrl: "https://placehold.co/100" 
+//             },
+//             client: { clientFid: 1, added: true }
+//           } as unknown as FrameContext);
+          
+//           setIsSDKLoaded(true);
+//           setHasTicket(true); 
+//           setLoadingTicket(false); 
+//         }
+//         return;
+//       }
+
+//       // PATH B: Production Mode
+//       try {
+//         const context = await sdk.context;
+//         if (isMounted) {
+//           setContext(context);
+//           sdk.actions.ready();
+//           setIsSDKLoaded(true);
+//         }
+//       } catch (error) {
+//         console.error("SDK Load Error:", error);
+//       }
+//     };
+
+//     init();
+
+//     return () => { isMounted = false; };
+//   }, []); 
+
+//   // --- 2. Check Firebase for existing ticket ---
+//   const checkTicketStatus = async () => {
+//     if (process.env.NODE_ENV === 'development') return;
+//     if (!context?.user?.fid) return;
+
+//     setLoadingTicket(true);
+//     const weekID = getCurrentWeekID();
+//     const ticketDocID = `${context.user.fid}_${weekID}`;
+
+//     try {
+//       const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
+//       if (ticketSnap.exists() && ticketSnap.data().paid) {
+//         setHasTicket(true);
+//       }
+//     } catch (error) {
+//       console.error("Error checking ticket:", error);
+//     } finally {
+//       setLoadingTicket(false);
+//     }
+//   };
+
+//   useEffect(() => {
+//     if (context?.user?.fid) {
+//       checkTicketStatus();
+//     }
+//   }, [context]);
+
+//   // --- RENDER ---
+//   if (!isSDKLoaded || loadingTicket) {
+//     return (
+//       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse gap-4">
+//         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
+//         {process.env.NODE_ENV === 'development' && (
+//            <p className="text-xs text-gray-500">Waiting for Dev Bypass...</p>
+//         )}
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
+      
+//       {/* THEME TOGGLE (Top Right) */}
+//       <div className="absolute top-0 right-0 z-20">
+//         <ThemeToggle />
+//       </div>
+
+//       {/* HEADER LOGO */}
+//       <div className="mt-8 mb-2 flex flex-col items-center">
+//         <div className="relative w-80 h-40">
+//           <Image 
+//             src="/logo.png" 
+//             alt="SnakeRush Logo" 
+//             fill
+//             className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]"
+//             priority
+//           />
+//         </div>
+//         {/* LIGHT MODE: Dark Grey Text | DARK MODE: Light Grey Text */}
+//         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
+//           Weekly Campaign: 
+//           {/* LIGHT MODE: Dark Green Text | DARK MODE: Neon Green Text */}
+//           <span className="ml-2 text-green-800 dark:text-neon-green font-black">
+//             {getCurrentWeekID()}
+//           </span>
+//         </p>
+//       </div>
+
+//       {/* INSTRUCTIONS CARD - FORCED DARK STYLE */}
+//       {/* We use bg-[#1E1E24] explicitly to ignore the light mode variable switch */}
+//       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
+        
+//         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+//           How to Play
+//         </h2>
+        
+//         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
+//           <li>Get the highest score for the day.</li>
+          
+//           {/* EASY MODE: Forced Neon Green Hex */}
+//           <li>
+//             <span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.
+//           </li>
+          
+//           {/* HARD MODE: Forced Danger Red Hex */}
+//           <li>
+//             <span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.
+//           </li>
+//         </ul>
+//       </div>
+
+//       {/* DEV BANNER */}
+//       {process.env.NODE_ENV === 'development' && (
+//         <div className="bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-500 px-4 py-2 rounded-lg text-xs font-mono border border-amber-300 dark:border-yellow-700 font-bold">
+//           🚧 DEV MODE: Ticket Bypassed
+//         </div>
+//       )}
+
+//       {/* ACTION AREA */}
+//       <div className="w-full max-w-sm flex flex-col gap-4">
+//         {hasTicket ? (
+//           <div className="animate-fade-in">
+//             {/* TICKET ACTIVE: Light Green BG/Dark Text (Light) vs Transparent/Neon (Dark) */}
+//             <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
+//               ✅ TICKET ACTIVE
+//             </div>
+            
+//             <Link href="/game" className="block w-full">
+//               {/* JOIN BUTTON: Dark Green/White Text (Light) vs Neon Green/Black Text (Dark) */}
+//               <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
+//                 JOIN GAME
+//               </button>
+//             </Link>
+//           </div>
+//         ) : (
+//           <div className="animate-fade-in">
+//              {context?.user?.fid && (
+//                <TicketButton 
+//                  fid={context.user.fid} 
+//                  onTicketPurchased={() => checkTicketStatus()} 
+//                />
+//              )}
+//             {!hasTicket && (
+//                <button className="w-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-400 font-bold py-4 rounded-xl mt-4 cursor-not-allowed opacity-50 border border-gray-300 dark:border-transparent">
+//                  JOIN GAME (LOCKED)
+//                </button>
+//             )}
+//           </div>
+//         )}
+//       </div>
+
+//       {/* BOTTOM NAVIGATION BAR */}
+//       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
+//         <div className="max-w-md mx-auto flex justify-around items-center">
+          
+//           {/* HOME (Active) */}
+//           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
+//             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
+//             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
+//           </Link>
+
+//           {/* RANK */}
+//           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
+//             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
+//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
+//           </Link>
+
+//           {/* PROFILE */}
+//           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
+//             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+//                {context?.user?.pfpUrl ? (
+//                  <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
+//                ) : (
+//                  <User size={16} className="text-gray-500 dark:text-gray-400" />
+//                )}
+//             </div>
+//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
+//           </Link>
+
+//         </div>
+//       </nav>
+//     </div>
+//   );
+// }
