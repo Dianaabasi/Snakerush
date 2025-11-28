@@ -1,26 +1,63 @@
 @import "tailwindcss";
 
+@theme {
+  --color-rush-purple: var(--rush-purple);
+  --color-neon-green: var(--neon-green);
+  --color-arcade-black: var(--arcade-black); 
+  --color-console-grey: var(--console-grey); 
+  --color-text-white: var(--text-main);      
+  --color-danger-red: var(--danger-red);
+}
+
+/* 1. LIGHT MODE (Clean & readable) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F3F4F6;  /* Cleaner Light Grey */
+  --foreground: #111827;  /* Near Black for text */
+  
+  --arcade-black: #F3F4F6; 
+  --console-grey: #FFFFFF; /* Pure White cards */
+  --text-main: #111827;    
+  
+  /* Adjusted accents for Light Mode visibility */
+  --rush-purple: #7C3AED;  /* Slightly darker purple */
+  --neon-green: #16A34A;   /* Darker green (readable on white) */
+  --danger-red: #DC2626;   /* Darker red */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* 2. DARK MODE (Original Arcade Look) */
+.dark {
+  --background: #121212;
+  --foreground: #F0F0F0;
+  
+  --arcade-black: #121212;
+  --console-grey: #1E1E24;
+  --text-main: #F0F0F0;
+  
+  --rush-purple: #8A2BE2;
+  --neon-green: #39FF14;
+  --danger-red: #FF4500;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Utilities */
+.btn-disabled {
+  @apply opacity-50 cursor-not-allowed filter grayscale;
+}
+
+/* Updated Glows to use the variable colors */
+.glow-green {
+  box-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+}
+
+.glow-purple {
+  box-shadow: 0 0 10px var(--rush-purple), 0 0 20px var(--rush-purple);
 }
