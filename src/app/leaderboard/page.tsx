@@ -9,20 +9,21 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { House, Trophy, User } from 'lucide-react';
 
+// Helper Type
 type FrameContext = Awaited<typeof sdk.context>;
 
 export default function LeaderboardPage() {
-    const [context, setContext] = useState<FrameContext>();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentFid, setCurrentFid] = useState<number>();
+//   const [currentFid, setCurrentFid] = useState<number>();
+  const [context, setContext] = useState<FrameContext>();
 
   useEffect(() => {
     const loadData = async () => {
       // 1. Get Current User
       try {
         const ctx = await sdk.context;
-        setCurrentFid(ctx?.user?.fid);
+        setContext(ctx);
         sdk.actions.ready();
       } catch (err) {
         console.error("SDK Context Error:", err);
@@ -93,7 +94,7 @@ export default function LeaderboardPage() {
           LOADING SCORES...
         </div>
       ) : (
-        <LeaderboardTable entries={entries} currentUserFid={currentFid} />
+        <LeaderboardTable entries={entries} currentUserFid={context?.user?.fid} />
       )}
 
       <div className="flex gap-4 text-sm font-medium text-rush-purple">
