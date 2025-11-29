@@ -96,7 +96,7 @@ export default function HomePage() {
       <div className="absolute top-0 right-0 z-20"><ThemeToggle /></div>
 
       <div className="mt-8 mb-2 flex flex-col items-center">
-        <div className="relative w-64 h-24">
+        <div className="relative w-80 h-40">
           <Image src="/logo.png" alt="SnakeRush Logo" fill className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]" priority />
         </div>
         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">

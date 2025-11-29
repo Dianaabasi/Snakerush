@@ -8,8 +8,9 @@ import {
   TransactionStatusLabel, 
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
+import { Wallet, ConnectWallet } from '@coinbase/onchainkit/wallet'; // Import Wallet components
 import { type Address, type Hex, parseEther } from 'viem';
-import { useAccount } from 'wagmi'; // Added to check connection status
+import { useAccount } from 'wagmi'; 
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
@@ -23,8 +24,7 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
   const { address, isConnected } = useAccount(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
 
-  // FIX: useMemo ensures 'calls' isn't recreated on every render, 
-  // which causes the button to stay disabled/inactive.
+  // FIX: useMemo ensures 'calls' isn't recreated on every render
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     
@@ -71,23 +71,27 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // Debugging: If this shows up, the app doesn't see the Farcaster wallet.
-  if (!isConnected || !address) {
-    return (
-      <div className="w-full max-w-xs mx-auto my-4 text-center p-4 bg-gray-900 rounded-lg">
-        <p className="text-yellow-500 text-xs font-bold mb-2">Wallet not detected by App</p>
-        <p className="text-gray-400 text-[10px]">
-          Try refreshing the frame or checking permissions.
-        </p>
-      </div>
-    );
-  }
-
   // Debugging: If Env var is missing
   if (!DEV_WALLET) {
     return <div className="text-red-500 text-xs text-center font-bold">⚠️ Config Error: No Dev Wallet</div>;
   }
 
+  // FIX: If wallet is not connected, show the Connect Button instead of an error text.
+  // This allows the user to click "Connect" to re-trigger the wallet popup.
+  if (!isConnected || !address) {
+    return (
+      <div className="w-full max-w-xs mx-auto my-4">
+        <Wallet>
+          <ConnectWallet 
+            className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
+            disconnectedLabel="Connect Wallet"
+          />
+        </Wallet>
+      </div>
+    );
+  }
+
+  // If Connected, show Mint Button
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction
