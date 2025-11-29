@@ -25,7 +25,9 @@ export default function HomePage() {
   const checkTicketStatus = useCallback(async (fid: number) => {
     setIsCheckingTicket(true);
     const weekID = getCurrentWeekID();
-    const ticketDocID = `${fid}_${weekID}`; // e.g. "887209_2025-W48"
+    
+    // FIX: Explicit string conversion
+    const ticketDocID = `${fid.toString()}_${weekID}`; 
 
     console.log(`Checking ticket for: ${ticketDocID}`);
 
@@ -69,7 +71,7 @@ export default function HomePage() {
     return () => { isMounted = false; };
   }, [checkTicketStatus]);
 
-  // --- FIX: Handler for successful purchase ---
+  // --- HANDLER for successful purchase ---
   const handleTicketPurchased = () => {
     // 1. Optimistically update UI so user doesn't have to refresh
     setHasTicket(true);
@@ -102,6 +104,7 @@ export default function HomePage() {
         </p>
       </div>
 
+      {/* Instructions Card: Forced Dark Style for Contrast */}
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">How to Play</h2>
         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
@@ -125,14 +128,13 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="animate-fade-in">
-             {/* If we are actively checking the DB, show a mini loader to prevent flashing the mint button */}
              {isCheckingTicket ? (
                 <div className="text-sm text-gray-500 animate-pulse py-4">Verifying Ticket...</div>
              ) : (
                context?.user?.fid && (
                  <TicketButton 
                    fid={context.user.fid} 
-                   onTicketPurchased={handleTicketPurchased} // Use new handler
+                   onTicketPurchased={handleTicketPurchased} 
                  />
                )
              )}
