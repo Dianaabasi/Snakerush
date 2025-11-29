@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, limit } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, limit, doc, getDoc } from 'firebase/firestore';
+import { getCurrentWeekID } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import sdk from '@farcaster/frame-sdk';
 import LeaderboardTable, { type LeaderboardEntry } from '@/components/LeaderboardTable';
@@ -15,8 +16,8 @@ type FrameContext = Awaited<typeof sdk.context>;
 export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-//   const [currentFid, setCurrentFid] = useState<number>();
   const [context, setContext] = useState<FrameContext>();
+  const [hasTicket, setHasTicket] = useState(false); 
 
   useEffect(() => {
     const loadData = async () => {
@@ -25,6 +26,18 @@ export default function LeaderboardPage() {
         const ctx = await sdk.context;
         setContext(ctx);
         sdk.actions.ready();
+        
+        // CHECK TICKET STATUS
+        if (ctx?.user?.fid) {
+          const fidString = ctx.user.fid.toString();
+          const weekID = getCurrentWeekID();
+          const ticketDocID = `${fidString}_${weekID}`;
+          
+          const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
+          if (ticketSnap.exists() && ticketSnap.data().paid) {
+            setHasTicket(true);
+          }
+        }
       } catch (err) {
         console.error("SDK Context Error:", err);
       }
@@ -101,9 +114,19 @@ export default function LeaderboardPage() {
         <Link href="/" className="hover:text-white transition-colors">
           ← Back to Home
         </Link>
-        <Link href="/game" className="hover:text-white transition-colors">
-          Play Now
-        </Link>
+        {/* CONDITIONAL PLAY BUTTON */}
+        {hasTicket ? (
+          <Link href="/game" className="hover:text-white transition-colors font-bold">
+            Play Now
+          </Link>
+        ) : (
+          <button 
+            onClick={() => alert("🎟️ You must mint a ticket on the Home page first!")}
+            className="hover:text-red-400 transition-colors cursor-pointer text-gray-500"
+          >
+            Play Now
+          </button>
+        )}
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
@@ -112,9 +135,9 @@ export default function LeaderboardPage() {
             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
           </Link>
-          <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
-            <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
-            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
+          <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px]">
+            <Trophy size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
+            <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Rank</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">

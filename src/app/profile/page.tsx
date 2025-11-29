@@ -146,7 +146,6 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-black text-gray-900 dark:text-white">
           {context?.user?.displayName || "Player"}
         </h1>
-        <p className="text-gray-500 text-xs font-mono">FID: {context?.user?.fid}</p>
       </div>
 
       {/* TICKET STATUS BADGE */}
@@ -224,14 +223,14 @@ export default function ProfilePage() {
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
-            <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+            <div className="w-6 h-6 rounded-full overflow-hidden border border-green-700 dark:border-neon-green flex items-center justify-center bg-gray-100 dark:bg-gray-800 shadow-[0_0_8px_rgba(57,255,20,0.5)]">
                {context?.user?.pfpUrl ? (
                  <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
                ) : (
                  <User size={16} className="text-gray-500 dark:text-gray-400" />
                )}
             </div>
-            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
+            <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Profile</span>
           </Link>
         </div>
       </nav>
