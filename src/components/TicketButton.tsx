@@ -8,7 +8,7 @@ import {
   TransactionStatusLabel, 
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
-import { Wallet, ConnectWallet } from '@coinbase/onchainkit/wallet'; // Import Wallet components
+import { Wallet, ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { type Address, type Hex, parseEther } from 'viem';
 import { useAccount } from 'wagmi'; 
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -24,10 +24,9 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
   const { address, isConnected } = useAccount(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
 
-  // FIX: useMemo ensures 'calls' isn't recreated on every render
+  // Memoize calls to prevent button flickering/disabling
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
-    
     return [
       {
         to: DEV_WALLET,
@@ -71,27 +70,24 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // Debugging: If Env var is missing
-  if (!DEV_WALLET) {
-    return <div className="text-red-500 text-xs text-center font-bold">⚠️ Config Error: No Dev Wallet</div>;
-  }
-
-  // FIX: If wallet is not connected, show the Connect Button instead of an error text.
-  // This allows the user to click "Connect" to re-trigger the wallet popup.
+  // 1. If not connected, show the OnchainKit Connect Button
+  // In the Preview Tool, this WILL ask for an external wallet (Normal).
+  // On Mobile, this will use the Smart Wallet/Embedded flow.
   if (!isConnected || !address) {
     return (
       <div className="w-full max-w-xs mx-auto my-4">
         <Wallet>
           <ConnectWallet 
             className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-            disconnectedLabel="Connect Wallet"
-          />
+          >
+            <span className="font-bold">Connect Wallet</span>
+          </ConnectWallet>
         </Wallet>
       </div>
     );
   }
 
-  // If Connected, show Mint Button
+  // 2. If connected, show Mint Ticket Button
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction
