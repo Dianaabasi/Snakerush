@@ -25,6 +25,9 @@ export default function GamePage() {
   const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
   const [finalScore, setFinalScore] = useState(0);
 
+  // REPLAY FIX: This key forces the GameCanvas to re-mount and reset completely
+  const [gameResetKey, setGameResetKey] = useState(0);
+
   // Claiming States
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimStatus, setClaimStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
@@ -32,9 +35,13 @@ export default function GamePage() {
   // Load User Context
   useEffect(() => {
     const loadContext = async () => {
-      const ctx = await sdk.context;
-      setContext(ctx);
-      sdk.actions.ready();
+      try {
+        const ctx = await sdk.context;
+        setContext(ctx);
+        sdk.actions.ready();
+      } catch (err) {
+        console.error("Context load error", err);
+      }
     };
     if (sdk) loadContext();
   }, []);
@@ -45,6 +52,7 @@ export default function GamePage() {
     setDifficulty(mode);
     setGameState('PLAYING');
     setClaimStatus('IDLE');
+    setGameResetKey(prev => prev + 1); // Force fresh start
   };
 
   const handleGameOver = (score: number) => {
@@ -55,23 +63,27 @@ export default function GamePage() {
   const handleReplay = () => {
     setGameState('PLAYING');
     setClaimStatus('IDLE');
+    setGameResetKey(prev => prev + 1); // Force fresh start
   };
 
   const handleClaim = async () => {
     if (!context?.user?.fid) {
-      alert("Please play inside Farcaster!");
+      console.error("No FID found, cannot save.");
       return;
     }
 
     setIsClaiming(true);
-    const fid = context.user.fid.toString();
+    // Ensure FID is string for Firestore path
+    const fidString = context.user.fid.toString();
     const dateKey = getTodayKey();
     
     // References
-    const userRef = doc(db, 'users', fid);
-    const dailyScoreRef = doc(db, 'users', fid, 'dailyScores', dateKey);
+    const userRef = doc(db, 'users', fidString);
+    const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
 
     try {
+      console.log(`Attempting to save score: ${finalScore} for FID: ${fidString}`);
+
       // 1. Check existing score for today
       const dailySnap = await getDoc(dailyScoreRef);
       let currentDailyHigh = 0;
@@ -86,7 +98,7 @@ export default function GamePage() {
 
         // 3. Write Daily Score
         await setDoc(dailyScoreRef, {
-          fid: parseInt(fid),
+          fid: context.user.fid, // Store as number inside doc
           date: dateKey,
           bestScore: finalScore,
           timestamp: serverTimestamp(),
@@ -95,7 +107,7 @@ export default function GamePage() {
         
         // 4. Update User Profile & Weekly Total (Crucial for Leaderboard)
         await setDoc(userRef, {
-          fid: parseInt(fid),
+          fid: context.user.fid,
           username: context.user.username || context.user.displayName || 'Unknown',
           pfpUrl: context.user.pfpUrl || '',
           // Increment the weekly score by the improvement amount
@@ -103,15 +115,15 @@ export default function GamePage() {
           lastPlayedAt: serverTimestamp()
         }, { merge: true });
 
-        console.log("New high score and leaderboard updated!");
+        console.log("✅ New high score and leaderboard updated!");
         setClaimStatus('SUCCESS');
       } else {
-        console.log("Score lower than daily best, ignoring.");
+        console.log("⚠️ Score lower than daily best, ignoring.");
         setClaimStatus('SUCCESS'); // Still show success so user knows game is done
       }
 
     } catch (error) {
-      console.error("Error saving score:", error);
+      console.error("❌ Error saving score:", error);
       setClaimStatus('ERROR');
     } finally {
       setIsClaiming(false);
@@ -124,24 +136,28 @@ export default function GamePage() {
   if (gameState === 'MENU') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 w-full max-w-sm">
-        <h1 className="text-4xl font-black text-gray-900 dark:text-white drop-shadow-sm">SELECT MODE</h1>
+        <h1 className="text-4xl font-black text-gray-900 dark:text-white drop-shadow-sm">
+          SELECT MODE
+        </h1>
         
+        {/* EASY MODE BUTTON */}
         <button 
           onClick={() => handleStart('EASY')}
-          className="w-full bg-neon-green/10 border-2 border-neon-green text-neon-green hover:bg-neon-green hover:text-black p-6 rounded-2xl transition-all group"
+          className="w-full bg-green-100 dark:bg-neon-green/10 border-2 border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green hover:bg-green-200 dark:hover:bg-neon-green dark:hover:text-black p-6 rounded-2xl transition-all group"
         >
           <div className="text-2xl font-black mb-1">EASY MODE</div>
-          <div className="text-sm opacity-80 group-hover:opacity-100 font-medium">
+          <div className="text-sm font-bold opacity-80 group-hover:opacity-100">
             Pass through walls • Classic Fun
           </div>
         </button>
 
+        {/* HARD MODE BUTTON */}
         <button 
           onClick={() => handleStart('HARD')}
-          className="w-full bg-danger-red/10 border-2 border-danger-red text-danger-red hover:bg-danger-red hover:text-white p-6 rounded-2xl transition-all group"
+          className="w-full bg-red-100 dark:bg-danger-red/10 border-2 border-red-600 dark:border-danger-red text-red-800 dark:text-danger-red hover:bg-red-200 dark:hover:bg-danger-red dark:hover:text-white p-6 rounded-2xl transition-all group"
         >
           <div className="text-2xl font-black mb-1">HARD MODE</div>
-          <div className="text-sm opacity-80 group-hover:opacity-100 font-medium">
+          <div className="text-sm font-bold opacity-80 group-hover:opacity-100">
             Walls Kill You • High Stakes
           </div>
         </button>
@@ -152,8 +168,12 @@ export default function GamePage() {
   // 2. GAME & GAME OVER
   return (
     <div className="relative w-full flex flex-col items-center">
-      {/* The Game Canvas handles the loop and controls */}
+      {/* FIX: key={gameResetKey} 
+         This tells React: "If this number changes, destroy the old game 
+         and build a completely new one." This fixes the replay bug.
+      */}
       <GameCanvas 
+        key={gameResetKey} 
         difficulty={difficulty} 
         onGameOver={handleGameOver}
       />

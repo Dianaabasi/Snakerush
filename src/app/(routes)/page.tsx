@@ -18,32 +18,38 @@ export default function HomePage() {
   const [context, setContext] = useState<FrameContext>();
   const [hasTicket, setHasTicket] = useState(false);
   
-  // Combine loading states to prevent waterfall delays
-  // We start true, and only set to false when CRITICAL data is ready.
-  const [isReady, setIsReady] = useState(false);
+  // FIX: Separate 'checking' state from 'loading app' state
+  const [isCheckingTicket, setIsCheckingTicket] = useState(false); 
 
-  // --- OPTIMIZED CHECK TICKET ---
+  // --- TICKET CHECKER ---
   const checkTicketStatus = useCallback(async (fid: number) => {
+    setIsCheckingTicket(true);
     const weekID = getCurrentWeekID();
-    const ticketDocID = `${fid}_${weekID}`;
+    const ticketDocID = `${fid}_${weekID}`; // e.g. "887209_2025-W48"
+
+    console.log(`Checking ticket for: ${ticketDocID}`);
 
     try {
       const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
       if (ticketSnap.exists() && ticketSnap.data().paid) {
+        console.log("✅ Ticket found in DB!");
         setHasTicket(true);
+      } else {
+        console.log("❌ No active ticket found.");
       }
     } catch (error) {
       console.error("Error checking ticket:", error);
+    } finally {
+      setIsCheckingTicket(false);
     }
   }, []);
 
-  // --- PARALLEL INITIALIZATION ---
+  // --- INITIALIZATION ---
   useEffect(() => {
     let isMounted = true;
 
     const init = async () => {
       try {
-        // 1. Load Context
         const ctx = await sdk.context;
         if (!isMounted) return;
         
@@ -51,25 +57,31 @@ export default function HomePage() {
         sdk.actions.ready();
         setIsSDKLoaded(true);
 
-        // 2. Check Ticket immediately if user exists
         if (ctx?.user?.fid) {
           await checkTicketStatus(ctx.user.fid);
         }
-        
       } catch (err) {
         console.error("SDK Init Error:", err);
-      } finally {
-        if (isMounted) setIsReady(true);
       }
     };
 
     init();
-
     return () => { isMounted = false; };
   }, [checkTicketStatus]);
 
-  // --- RENDER LOADING ---
-  if (!isReady) {
+  // --- FIX: Handler for successful purchase ---
+  const handleTicketPurchased = () => {
+    // 1. Optimistically update UI so user doesn't have to refresh
+    setHasTicket(true);
+    
+    // 2. Double check DB in background just in case
+    if (context?.user?.fid) {
+      checkTicketStatus(context.user.fid);
+    }
+  };
+
+  // --- RENDER ---
+  if (!isSDKLoaded) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse">
         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
@@ -79,41 +91,23 @@ export default function HomePage() {
 
   return (
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
-      
-      <div className="absolute top-0 right-0 z-20">
-        <ThemeToggle />
-      </div>
+      <div className="absolute top-0 right-0 z-20"><ThemeToggle /></div>
 
       <div className="mt-8 mb-2 flex flex-col items-center">
         <div className="relative w-64 h-24">
-          <Image 
-            src="/logo.png" 
-            alt="SnakeRush Logo" 
-            fill
-            className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]"
-            priority
-          />
+          <Image src="/logo.png" alt="SnakeRush Logo" fill className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]" priority />
         </div>
         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
-          Weekly Campaign: 
-          <span className="ml-2 text-green-800 dark:text-neon-green font-black">
-            {getCurrentWeekID()}
-          </span>
+          Weekly Campaign: <span className="ml-2 text-green-800 dark:text-neon-green font-black">{getCurrentWeekID()}</span>
         </p>
       </div>
 
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          How to Play
-        </h2>
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">How to Play</h2>
         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
           <li>Get the highest score for the day.</li>
-          <li>
-            <span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.
-          </li>
-          <li>
-            <span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.
-          </li>
+          <li><span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.</li>
+          <li><span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.</li>
         </ul>
       </div>
 
@@ -123,7 +117,6 @@ export default function HomePage() {
             <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
               ✅ TICKET ACTIVE
             </div>
-            
             <Link href="/game" className="block w-full">
               <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
                 JOIN GAME
@@ -132,13 +125,19 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="animate-fade-in">
-             {context?.user?.fid && (
-               <TicketButton 
-                 fid={context.user.fid} 
-                 onTicketPurchased={() => checkTicketStatus(context.user.fid)} 
-               />
+             {/* If we are actively checking the DB, show a mini loader to prevent flashing the mint button */}
+             {isCheckingTicket ? (
+                <div className="text-sm text-gray-500 animate-pulse py-4">Verifying Ticket...</div>
+             ) : (
+               context?.user?.fid && (
+                 <TicketButton 
+                   fid={context.user.fid} 
+                   onTicketPurchased={handleTicketPurchased} // Use new handler
+                 />
+               )
              )}
-            {!hasTicket && (
+            
+            {!hasTicket && !isCheckingTicket && (
                <button className="w-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-400 font-bold py-4 rounded-xl mt-4 cursor-not-allowed opacity-50 border border-gray-300 dark:border-transparent">
                  JOIN GAME (LOCKED)
                </button>
@@ -149,17 +148,14 @@ export default function HomePage() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
-          
           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
           </Link>
-
           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
           </Link>
-
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                {context?.user?.pfpUrl ? (
@@ -170,7 +166,6 @@ export default function HomePage() {
             </div>
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
           </Link>
-
         </div>
       </nav>
     </div>
