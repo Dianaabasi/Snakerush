@@ -20,11 +20,11 @@ interface TicketButtonProps {
 export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   
-  // Define calls array (Removed 'as const' to prevent readonly type conflicts)
+  // Define calls array (Updated price to 0.00001 ETH)
   const calls = [
     {
       to: DEV_WALLET,
-      value: parseEther('0.0005'),
+      value: parseEther('0.00001'), 
       data: '0x' as Hex, 
     },
   ];
@@ -71,7 +71,7 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
       >
         <TransactionButton 
           className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-          text="MINT TICKET (0.0005 ETH)" 
+          text="MINT TICKET (0.00001 ETH)" 
         />
         <TransactionStatus>
           <TransactionStatusLabel />

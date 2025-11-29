@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -11,35 +11,21 @@ import TicketButton from '@/components/TicketButton';
 import { House, Trophy, User } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
 
-// Helper type to extract the context type directly from the SDK
 type FrameContext = Awaited<typeof sdk.context>;
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<FrameContext>();
   const [hasTicket, setHasTicket] = useState(false);
-  const [loadingTicket, setLoadingTicket] = useState(true);
+  
+  // Combine loading states to prevent waterfall delays
+  // We start true, and only set to false when CRITICAL data is ready.
+  const [isReady, setIsReady] = useState(false);
 
-  // 1. Initialize Farcaster SDK
-  useEffect(() => {
-    const loadContext = async () => {
-      const context = await sdk.context;
-      setContext(context);
-      sdk.actions.ready();
-      setIsSDKLoaded(true);
-    };
-    if (sdk && !isSDKLoaded) {
-      loadContext();
-    }
-  }, [isSDKLoaded]);
-
-  // 2. Check Firebase for existing ticket
-  const checkTicketStatus = async () => {
-    if (!context?.user?.fid) return;
-
-    setLoadingTicket(true);
+  // --- OPTIMIZED CHECK TICKET ---
+  const checkTicketStatus = useCallback(async (fid: number) => {
     const weekID = getCurrentWeekID();
-    const ticketDocID = `${context.user.fid}_${weekID}`;
+    const ticketDocID = `${fid}_${weekID}`;
 
     try {
       const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
@@ -48,18 +34,42 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error("Error checking ticket:", error);
-    } finally {
-      setLoadingTicket(false);
     }
-  };
+  }, []);
 
+  // --- PARALLEL INITIALIZATION ---
   useEffect(() => {
-    if (context?.user?.fid) {
-      checkTicketStatus();
-    }
-  }, [context]);
+    let isMounted = true;
 
-  if (!isSDKLoaded || loadingTicket) {
+    const init = async () => {
+      try {
+        // 1. Load Context
+        const ctx = await sdk.context;
+        if (!isMounted) return;
+        
+        setContext(ctx);
+        sdk.actions.ready();
+        setIsSDKLoaded(true);
+
+        // 2. Check Ticket immediately if user exists
+        if (ctx?.user?.fid) {
+          await checkTicketStatus(ctx.user.fid);
+        }
+        
+      } catch (err) {
+        console.error("SDK Init Error:", err);
+      } finally {
+        if (isMounted) setIsReady(true);
+      }
+    };
+
+    init();
+
+    return () => { isMounted = false; };
+  }, [checkTicketStatus]);
+
+  // --- RENDER LOADING ---
+  if (!isReady) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse">
         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
@@ -70,12 +80,10 @@ export default function HomePage() {
   return (
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
       
-      {/* THEME TOGGLE (Top Right) */}
       <div className="absolute top-0 right-0 z-20">
         <ThemeToggle />
       </div>
 
-      {/* HEADER LOGO */}
       <div className="mt-8 mb-2 flex flex-col items-center">
         <div className="relative w-64 h-24">
           <Image 
@@ -94,7 +102,6 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* INSTRUCTIONS CARD - FORCED DARK STYLE */}
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           How to Play
@@ -110,7 +117,6 @@ export default function HomePage() {
         </ul>
       </div>
 
-      {/* ACTION AREA (TICKET / JOIN) */}
       <div className="w-full max-w-sm flex flex-col gap-4">
         {hasTicket ? (
           <div className="animate-fade-in">
@@ -129,7 +135,7 @@ export default function HomePage() {
              {context?.user?.fid && (
                <TicketButton 
                  fid={context.user.fid} 
-                 onTicketPurchased={() => checkTicketStatus()} 
+                 onTicketPurchased={() => checkTicketStatus(context.user.fid)} 
                />
              )}
             {!hasTicket && (
@@ -141,23 +147,19 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* BOTTOM NAVIGATION BAR */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
           
-          {/* HOME (Active) */}
           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
           </Link>
 
-          {/* RANK */}
           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
           </Link>
 
-          {/* PROFILE */}
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                {context?.user?.pfpUrl ? (
