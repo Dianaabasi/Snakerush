@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { 
   Transaction, 
   TransactionButton, 
@@ -20,9 +20,25 @@ interface TicketButtonProps {
 }
 
 export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
-  const { address, isConnected } = useAccount(); 
+  const { address, isConnected, status } = useAccount(); 
   const { connect, connectors } = useConnect(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
+
+  // --- AUTO CONNECT LOGIC ---
+  useEffect(() => {
+    // If not connected and not currently trying to connect...
+    if (!isConnected && status !== 'connecting' && status !== 'reconnecting') {
+      
+      // 1. Look for the 'injected' connector (Farcaster's internal wallet)
+      const injectedConnector = connectors.find((c) => c.id === 'injected');
+      
+      // 2. If found, force connection immediately
+      if (injectedConnector) {
+        console.log("🔌 Auto-connecting to Farcaster Wallet...");
+        connect({ connector: injectedConnector });
+      }
+    }
+  }, [isConnected, status, connect, connectors]);
 
   // Memoize calls
   const calls = useMemo(() => {
@@ -70,35 +86,42 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  const handleConnect = () => {
-    // 1. Try to find the "Injected" connector (Farcaster Wallet)
-    const injectedConnector = connectors.find((c) => c.id === 'injected');
-    
-    // 2. If found, connect. If not, fallback to the first available (Coinbase)
-    if (injectedConnector) {
-      connect({ connector: injectedConnector });
-    } else if (connectors.length > 0) {
-      connect({ connector: connectors[0] });
-    }
-  };
+  // --- RENDER STATES ---
 
-  // --- STATE 1: WALLET NOT CONNECTED ---
-  if (!isConnected || !address) {
+  // 1. Loading/Connecting State
+  if (status === 'connecting' || status === 'reconnecting') {
     return (
-      <div className="w-full max-w-xs mx-auto my-4">
-        {/* We use a standard button here to trigger the Wagmi connection logic 
-            instead of the OnchainKit UI which forces the external popup. */}
-        <button
-          onClick={handleConnect}
-          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-        >
-          Connect Wallet
-        </button>
+      <div className="w-full max-w-xs mx-auto my-4 text-center">
+        <div className="animate-pulse bg-gray-800 text-neon-green py-3 px-6 rounded-lg font-bold">
+          Syncing Wallet...
+        </div>
       </div>
     );
   }
 
-  // --- STATE 2: CONNECTED (SHOW MINT BUTTON) ---
+  // 2. Still Not Connected (Fallback Manual Button)
+  if (!isConnected || !address) {
+    return (
+      <div className="w-full max-w-xs mx-auto my-4">
+        <button
+          onClick={() => {
+            const injected = connectors.find(c => c.id === 'injected');
+            if (injected) connect({ connector: injected });
+            else alert("No wallet found. Try opening in Warpcast.");
+          }}
+          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
+        >
+          Connect Wallet
+        </button>
+        {/* Debug info regarding WebSocket error */}
+        <p className="text-[10px] text-red-400 mt-2 text-center">
+          If this doesn`t click, check Reown Dashboard Settings.
+        </p>
+      </div>
+    );
+  }
+
+  // 3. Connected: Show Mint Button
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction
