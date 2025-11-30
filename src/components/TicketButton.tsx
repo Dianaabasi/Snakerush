@@ -24,7 +24,7 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
   const { address, isConnected } = useAccount(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
 
-  // Memoize calls to prevent button flickering/disabling
+  // Memoize calls to prevent button flickering
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     return [
@@ -70,16 +70,15 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-// 1. If not connected, show Connect Wallet Button
+  // 1. If not connected, show Connect Wallet Button
   if (!isConnected || !address) {
     return (
       <div className="w-full max-w-xs mx-auto my-4">
         <Wallet>
           <ConnectWallet 
             className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-          >
-            <span className="font-bold">Connect Wallet</span>
-          </ConnectWallet>
+            disconnectedLabel="Connect Wallet"
+          />
         </Wallet>
       </div>
     );

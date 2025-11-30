@@ -1,12 +1,36 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/Providers"; 
-import { ThemeProvider } from "@/components/ThemeProvider"; // Import the provider
+import { ThemeProvider } from "@/components/ThemeProvider";
 import '@coinbase/onchainkit/styles.css'; 
+
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://snakerush.vercel.app';
 
 export const metadata: Metadata = {
   title: "SnakeRush",
   description: "Weekly Snake Challenge on Farcaster",
+  openGraph: {
+    title: "SnakeRush",
+    description: "Weekly Snake Challenge. Play, Score, Win.",
+    images: [`${appUrl}/logo.png`], 
+  },
+  other: {
+    // This tag tells Farcaster "I am a Miniapp (Frame v2)"
+    "fc:frame": JSON.stringify({
+      version: "next",
+      imageUrl: `${appUrl}/logo.png`, //
+      button: {
+        title: "Play SnakeRush",
+        action: {
+          type: "launch_frame",
+          name: "SnakeRush",
+          url: appUrl,
+          splashImageUrl: `${appUrl}/logo.png`,
+          splashBackgroundColor: "#121212",
+        },
+      },
+    }),
+  },
 };
 
 export default function RootLayout({
