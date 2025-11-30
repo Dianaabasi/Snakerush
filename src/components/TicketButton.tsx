@@ -8,9 +8,8 @@ import {
   TransactionStatusLabel, 
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
-import { Wallet, ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { type Address, type Hex, parseEther } from 'viem';
-import { useAccount } from 'wagmi'; 
+import { useAccount, useConnect } from 'wagmi'; 
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
@@ -22,9 +21,10 @@ interface TicketButtonProps {
 
 export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
   const { address, isConnected } = useAccount(); 
+  const { connect, connectors } = useConnect(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
 
-  // Memoize calls to prevent button flickering
+  // Memoize calls
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     return [
@@ -70,21 +70,35 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // 1. If not connected, show Connect Wallet Button
+  const handleConnect = () => {
+    // 1. Try to find the "Injected" connector (Farcaster Wallet)
+    const injectedConnector = connectors.find((c) => c.id === 'injected');
+    
+    // 2. If found, connect. If not, fallback to the first available (Coinbase)
+    if (injectedConnector) {
+      connect({ connector: injectedConnector });
+    } else if (connectors.length > 0) {
+      connect({ connector: connectors[0] });
+    }
+  };
+
+  // --- STATE 1: WALLET NOT CONNECTED ---
   if (!isConnected || !address) {
     return (
       <div className="w-full max-w-xs mx-auto my-4">
-        <Wallet>
-          <ConnectWallet 
-            className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-            disconnectedLabel="Connect Wallet"
-          />
-        </Wallet>
+        {/* We use a standard button here to trigger the Wagmi connection logic 
+            instead of the OnchainKit UI which forces the external popup. */}
+        <button
+          onClick={handleConnect}
+          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
+        >
+          Connect Wallet
+        </button>
       </div>
     );
   }
 
-  // 2. If connected, show Mint Ticket Button
+  // --- STATE 2: CONNECTED (SHOW MINT BUTTON) ---
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction

@@ -4,12 +4,13 @@ import { OnchainKitProvider } from '@coinbase/onchainkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { base } from 'wagmi/chains'; // Base
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { coinbaseWallet } from 'wagmi/connectors';
+import { coinbaseWallet, injected } from 'wagmi/connectors';
 import { type ReactNode, useState } from 'react';
 
 const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
+    injected(),
     coinbaseWallet({
       appName: 'SnakeRush',
     }),
