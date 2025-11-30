@@ -70,9 +70,7 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // 1. If not connected, show the OnchainKit Connect Button
-  // In the Preview Tool, this WILL ask for an external wallet (Normal).
-  // On Mobile, this will use the Smart Wallet/Embedded flow.
+// 1. If not connected, show Connect Wallet Button
   if (!isConnected || !address) {
     return (
       <div className="w-full max-w-xs mx-auto my-4">

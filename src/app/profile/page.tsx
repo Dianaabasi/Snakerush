@@ -214,9 +214,9 @@ export default function ProfilePage() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
-          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
-            <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
-            <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
+          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px] group">
+            <House size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
+            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Home</span>
           </Link>
           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
