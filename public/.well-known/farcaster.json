@@ -1,18 +1,17 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOiA4ODcyMDksICJ0eXBlIjogImN1c3RvZHkiLCAia2V5IjogIjB4N0Q0MDBGRDFGNTkyYkI0RkNkNmEzNjNCZkQyMDBBNDNEMTY3MDRlNyJ9",
-    "payload": "eyJkb21haW4iOiAic25ha2VydXNoLXZlcmNlbC5hcHAifQ",
-    "signature": "MHg1..."
+    "header": "eyJmaWQiOjExNzg4NjYsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhFYTZhRDNiYzRhMDc2ZUMxN0MyQURBQUY1ODlCNkZFZWZENUY3QWVDIn0",
+    "payload": "eyJkb21haW4iOiJzbmFrZXJ1c2gudmVyY2VsLmFwcCJ9",
+    "signature": "69vPqO88kdh7eTkrAO3bXJ7Pi4Z1oCv4tel3Gi/qjlw74/HDRZtx0cT3dy0/GotzyyWd89NEeUhMxiyeN/GrwRs="
   },
   "frame": {
     "version": "1",
     "name": "SnakeRush",
-    "iconUrl": "https://your-domain.com/logo.png",
-    "homeUrl": "https://your-domain.com",
-    "imageUrl": "https://your-domain.com/logo.png",
+    "iconUrl": "https://snakerush.vercel.app/logo.png",
+    "homeUrl": "https://snakerush.vercel.app",
+    "imageUrl": "https://snakerush.vercel.app/logo.png",
     "buttonTitle": "Play SnakeRush",
-    "splashImageUrl": "https://your-domain.com/logo.png",
-    "splashBackgroundColor": "#121212",
-    "webhookUrl": "https://your-domain.com/api/webhook"
+    "splashImageUrl": "https://snakerush.vercel.app/logo.png",
+    "splashBackgroundColor": "#121212"
   }
 }
