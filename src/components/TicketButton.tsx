@@ -9,7 +9,6 @@ import {
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
 import { type Address, type Hex, parseEther } from 'viem';
-import { useAccount, useConnect } from 'wagmi'; 
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
@@ -20,20 +19,16 @@ interface TicketButtonProps {
 }
 
 export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
-  const { address, isConnected, status } = useAccount(); 
-  const { connect, connectors } = useConnect(); 
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   const [isClient, setIsClient] = useState(false);
 
-  // FIX 1: Use setTimeout to prevent "Synchronous setState" warning
+  // Prevent hydration errors by ensuring we only render on client
   useEffect(() => {
     const timer = setTimeout(() => setIsClient(true), 0);
     return () => clearTimeout(timer);
   }, []);
 
-  // FIX 2: REMOVED the auto-connect useEffect. 
-  // It was causing "Aborted" errors by fighting with Wagmi's built-in auto-reconnect.
-
+  // Memoize calls to prevent button flickering
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     return [
@@ -79,63 +74,11 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // Safe connect function that prioritizes Farcaster/Coinbase
-  const handleConnect = () => {
-    // 1. Try Injected (Farcaster Native)
-    const injected = connectors.find(c => c.id === 'injected');
-    if (injected) {
-      connect({ connector: injected });
-      return;
-    }
-
-    // 2. Try Coinbase SDK
-    const coinbase = connectors.find(c => c.id === 'coinbaseWalletSDK');
-    if (coinbase) {
-      connect({ connector: coinbase });
-      return;
-    }
-
-    // 3. Fallback
-    if (connectors.length > 0) {
-      connect({ connector: connectors[0] });
-    }
-  };
-
-  // --- RENDER STATES ---
-
-  // 0. Prevent Server-Side Rendering Mismatch
+  // 0. Loading State
   if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
 
-  // 1. Loading/Reconnecting State
-  if (status === 'reconnecting' || status === 'connecting') {
-    return (
-      <div className="w-full max-w-xs mx-auto my-4 text-center">
-        <div className="animate-pulse bg-gray-800 text-neon-green py-3 px-6 rounded-lg font-bold text-sm">
-          Syncing Wallet...
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Not Connected -> Show Manual Connect Button
-  if (!isConnected || !address) {
-    return (
-      <div className="w-full max-w-xs mx-auto my-4">
-        <button
-          onClick={handleConnect}
-          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
-        >
-          Connect Wallet
-        </button>
-        {/* Helper text for debugging */}
-        <p className="text-[10px] text-gray-500 mt-2 text-center">
-          Tap to link your Farcaster wallet
-        </p>
-      </div>
-    );
-  }
-
-  // 3. Connected -> Show Mint Ticket Button
+  // 1. Direct Transaction Button (No "Connect Wallet" step)
+  // OnchainKit will handle the connection prompt if needed when clicked.
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction
