@@ -116,6 +116,7 @@ import {
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
 import { type Address, type Hex, parseEther } from 'viem';
+import { useAccount, useConnect } from 'wagmi'; // Added useConnect
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
@@ -126,10 +127,12 @@ interface TicketButtonProps {
 }
 
 export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
+  const { isConnected } = useAccount(); 
+  const { connect, connectors } = useConnect();
+  
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   const [isClient, setIsClient] = useState(false);
 
-  // Prevent hydration errors
   useEffect(() => {
     const timer = setTimeout(() => setIsClient(true), 0);
     return () => clearTimeout(timer);
@@ -154,11 +157,8 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
 
   const handleSuccess = async (response: OnchainSuccessResponse) => {
     console.log('Transaction successful:', response);
-    
     const txHash = response?.transactionReceipts?.[0]?.transactionHash || 
-                   response?.transactionHash || 
-                   'pending';
-
+                   response?.transactionHash || 'pending';
     const weekID = getCurrentWeekID();
     const ticketDocID = `${fid}_${weekID}`;
 
@@ -180,11 +180,39 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // 0. Loading State
+  // Logic to force connection if disconnected
+  const handleManualConnect = () => {
+    // Prioritize Coinbase (Farcaster Native) or Injected
+    const coinbase = connectors.find(c => c.id === 'coinbaseWalletSDK');
+    const injected = connectors.find(c => c.id === 'injected');
+    
+    if (coinbase) connect({ connector: coinbase });
+    else if (injected) connect({ connector: injected });
+    else if (connectors.length > 0) connect({ connector: connectors[0] });
+  };
+
   if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
 
-  // 1. Direct Transaction Button
-  // We removed the connection check. Clicking this will trigger the wallet.
+  // --- 1. DISCONNECTED STATE: Show "Fake" Mint Button ---
+  // This button looks exactly like the real one but triggers a connection first.
+  // It bypasses the OnchainKit "Health Check" that is freezing your UI.
+  if (!isConnected) {
+    return (
+      <div className="w-full max-w-xs mx-auto my-4">
+        <button
+          onClick={handleManualConnect}
+          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all animate-pulse"
+        >
+          MINT TICKET (0.00001 ETH)
+        </button>
+        <p className="text-xs text-gray-500 text-center mt-2">
+          Valid for Week: {getCurrentWeekID()}
+        </p>
+      </div>
+    );
+  }
+
+  // --- 2. CONNECTED STATE: Show Real Transaction Button ---
   return (
     <div className="w-full max-w-xs mx-auto my-4">
       <Transaction
