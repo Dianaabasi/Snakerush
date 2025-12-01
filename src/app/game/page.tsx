@@ -8,8 +8,8 @@ import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
 import GameOverModal from '@/components/GameOverModal';
 import { getCurrentWeekID } from '@/lib/utils';
-import Link from 'next/link'; // Added for Back to Home button
-import { ShoppingCart } from 'lucide-react'; // Icon for store
+import { Heart, ShoppingCart } from 'lucide-react';
+import Link from 'next/link';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
@@ -17,7 +17,6 @@ const POOL_CONTRIBUTION = 0.25;
 
 export default function GamePage() {
   const [context, setContext] = useState<FrameContext>();
-  // Added 'NO_LIVES' state
   const [gameState, setGameState] = useState<'LOADING' | 'NO_LIVES' | 'PLAYING' | 'PAUSED' | 'OVER'>('LOADING');
   const [finalScore, setFinalScore] = useState(0);
   const [lives, setLives] = useState<number>(0);
@@ -41,29 +40,25 @@ export default function GamePage() {
     init();
   }, []);
 
-  // --- CORE LOGIC ---
+  // 1. Check Lives before starting
   const checkLivesAndStart = async (fid: number) => {
     const userRef = doc(db, 'users', fid.toString());
-    
     try {
-        // 1. Check Lives First
         const userSnap = await getDoc(userRef);
         const currentLives = userSnap.exists() ? (userSnap.data().lives || 0) : 0;
         setLives(currentLives);
 
         if (currentLives <= 0) {
             setGameState('NO_LIVES');
-            return;
+        } else {
+            await startGameTransaction(fid);
         }
-
-        // 2. If lives exist, run transaction to deduct 1 and start
-        await startGameTransaction(fid);
-
     } catch (e) {
         console.error("Init Error:", e);
     }
   };
 
+  // 2. Transaction: Deduct Life, Add to Pool
   const startGameTransaction = async (fid: number) => {
     const weekID = getCurrentWeekID();
     const userRef = doc(db, 'users', fid.toString());
@@ -78,23 +73,16 @@ export default function GamePage() {
         if (currentLives < 1) throw "Not enough lives";
 
         transaction.update(userRef, { lives: currentLives - 1 });
-        
-        transaction.set(campaignRef, { 
-          poolTotal: increment(POOL_CONTRIBUTION) 
-        }, { merge: true });
+        transaction.set(campaignRef, { poolTotal: increment(POOL_CONTRIBUTION) }, { merge: true });
 
         setLives(currentLives - 1); 
       });
-
       setGameState('PLAYING');
-      
     } catch (e) {
       console.error("Game Start Error:", e);
-      setGameState('NO_LIVES'); // Fallback if transaction fails due to lives
+      setGameState('NO_LIVES');
     }
   };
-
-  // --- HANDLERS ---
 
   const handleGameOver = (score: number) => {
     setFinalScore(score);
@@ -148,30 +136,28 @@ export default function GamePage() {
     }
   };
 
-  // --- RENDER ---
-
   if (gameState === 'LOADING') {
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-neon-green animate-pulse">
-            <div className="text-2xl font-bold">Checking Lives...</div>
+            <div className="text-2xl font-bold">STARTING GAME...</div>
         </div>
     );
   }
 
-  // NEW: No Lives View
+  // --- NO LIVES SCREEN ---
   if (gameState === 'NO_LIVES') {
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">
-            <div className="text-6xl">💔</div>
+            <div className="text-6xl animate-bounce">💔</div>
             <h1 className="text-3xl font-black text-danger-red">OUT OF LIVES</h1>
             <p className="text-gray-400 text-sm max-w-xs">
-                You need lives to play. Buy a ticket to replenish your energy!
+                You need lives to play. Go back to the store to get more!
             </p>
             
             <Link href="/" className="w-full max-w-xs">
                 <button className="w-full bg-rush-purple hover:bg-purple-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(138,43,226,0.4)]">
                     <ShoppingCart size={20} />
-                    GET TICKETS
+                    GO TO STORE
                 </button>
             </Link>
         </div>
@@ -181,25 +167,20 @@ export default function GamePage() {
   return (
     <div className="relative w-full flex flex-col items-center">
         
+        {/* CENTERED LIFE BAR (Non-Overlapping) */}
+        <div className="mb-2 flex items-center gap-2 text-danger-red font-black bg-gray-900/50 px-4 py-1 rounded-full border border-gray-800">
+            <Heart size={20} fill="currentColor" />
+            <span className="text-lg">{lives} Lives</span>
+        </div>
+
         {/* CANVAS ENGINE */}
         <GameCanvas 
             key={gameResetKey} 
             phase={gamePhase} 
-            lives={lives} // Pass lives to display in HUD
             onGameOver={handleGameOver}
             onPhaseTransition={handlePhaseTransition} 
             isPaused={gameState === 'PAUSED'} 
         />
-
-        {/* END GAME BUTTON */}
-        {gameState === 'PLAYING' && (
-            <button 
-                onClick={() => handleGameOver(finalScore)}
-                className="mt-6 border-2 border-red-900/50 text-red-900 dark:text-red-500 px-6 py-2 rounded-full font-bold text-xs hover:bg-red-900/20"
-            >
-                END GAME
-            </button>
-        )}
 
         {/* TRANSITION MODAL */}
         {gameState === 'PAUSED' && (

@@ -1,48 +1,67 @@
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { type Direction } from '@/store/gameStore';
 
 interface DirectionButtonsProps {
   onDirectionChange: (dir: Direction) => void;
+  onEndGame: () => void;
 }
 
-export default function DirectionButtons({ onDirectionChange }: DirectionButtonsProps) {
-  const btnClass = "p-4 bg-console-grey rounded-xl border border-gray-700 active:bg-neon-green active:text-black transition-colors shadow-lg touch-manipulation";
+export default function DirectionButtons({ onDirectionChange, onEndGame }: DirectionButtonsProps) {
+  // Common style for the directional keys
+  const arrowBtnClass = "w-14 h-14 bg-gray-800 rounded-lg flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all shadow-lg border border-gray-700";
+  
+  // Style for the center End Game button
+  const centerBtnClass = "w-14 h-14 bg-red-900/50 rounded-full flex items-center justify-center active:bg-red-800 active:scale-95 transition-all border border-red-800";
 
   return (
-    <div className="flex gap-4 justify-center mt-6 w-full max-w-sm">
-      <button 
-        className={btnClass} 
-        onPointerDown={(e) => { e.preventDefault(); onDirectionChange('LEFT'); }}
-        aria-label="Left"
-      >
-        <ArrowLeft size={32} />
-      </button>
+    <div className="flex flex-col items-center gap-2 mt-6">
+      {/* ROW 1: UP */}
+      <div>
+        <button 
+          className={arrowBtnClass}
+          onPointerDown={(e) => { e.preventDefault(); onDirectionChange('UP'); }}
+        >
+          <ChevronUp size={32} className="text-white" />
+        </button>
+      </div>
 
-      {/* Stack Up/Down in the middle for a D-pad feel, or keep horizontal as requested. 
-          The user asked for horizontal arrangement. */}
-      <button 
-        className={btnClass} 
-        onPointerDown={(e) => { e.preventDefault(); onDirectionChange('UP'); }}
-        aria-label="Up"
-      >
-        <ArrowUp size={32} />
-      </button>
+      {/* ROW 2: LEFT, CENTER, RIGHT */}
+      <div className="flex gap-2">
+        <button 
+          className={arrowBtnClass}
+          onPointerDown={(e) => { e.preventDefault(); onDirectionChange('LEFT'); }}
+        >
+          <ChevronLeft size={32} className="text-white" />
+        </button>
 
-      <button 
-        className={btnClass} 
-        onPointerDown={(e) => { e.preventDefault(); onDirectionChange('DOWN'); }}
-        aria-label="Down"
-      >
-        <ArrowDown size={32} />
-      </button>
+        {/* CENTER BUTTON: END GAME */}
+        <button 
+          className={centerBtnClass}
+          onClick={onEndGame}
+          aria-label="End Game"
+        >
+          <X size={24} className="text-red-500" />
+        </button>
 
-      <button 
-        className={btnClass} 
-        onPointerDown={(e) => { e.preventDefault(); onDirectionChange('RIGHT'); }}
-        aria-label="Right"
-      >
-        <ArrowRight size={32} />
-      </button>
+        <button 
+          className={arrowBtnClass}
+          onPointerDown={(e) => { e.preventDefault(); onDirectionChange('RIGHT'); }}
+        >
+          <ChevronRight size={32} className="text-white" />
+        </button>
+      </div>
+
+      {/* ROW 3: DOWN */}
+      <div>
+        <button 
+          className={arrowBtnClass}
+          onPointerDown={(e) => { e.preventDefault(); onDirectionChange('DOWN'); }}
+        >
+          <ChevronDown size={32} className="text-white" />
+        </button>
+      </div>
+      
+      <p className="text-[10px] text-gray-500 mt-2">Center button ends game</p>
     </div>
   );
 }

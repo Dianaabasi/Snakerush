@@ -4,11 +4,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { PALETTE } from '@/styles/palette';
 import { type Direction, type GamePhase, type Point, type Obstacle } from '@/store/gameStore';
 import DirectionButtons from './DirectionButtons';
-import { Heart } from 'lucide-react'; // Import Heart
 
 interface GameCanvasProps {
   phase: GamePhase;
-  lives: number; // Added lives prop
   onGameOver: (score: number) => void;
   onPhaseTransition: () => void;
   isPaused: boolean;
@@ -19,9 +17,10 @@ const CANVAS_WIDTH = 360;
 const CANVAS_HEIGHT = 360; 
 const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }]; 
 
-export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
+export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
+  // State Refs
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -29,10 +28,9 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
   const scoreRef = useRef(0);
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Mechanics Refs
   const obstaclesRef = useRef<Obstacle[]>([]);
-  
-  // FIX: Start really slow (400ms)
-  const speedRef = useRef(400);
+  const speedRef = useRef(250); // Start Slow (250ms)
 
   const [score, setScore] = useState(0);
 
@@ -49,23 +47,34 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
   };
 
   const draw = (ctx: CanvasRenderingContext2D) => {
+    // 1. Background (Old Style)
     ctx.fillStyle = PALETTE.darkArcadeBlack;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Food
+    // 2. Grid (Old Style)
+    ctx.strokeStyle = '#1E1E24';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= CANVAS_WIDTH; i += GRID_SIZE) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, CANVAS_HEIGHT); ctx.stroke();
+    }
+    for (let i = 0; i <= CANVAS_HEIGHT; i += GRID_SIZE) {
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CANVAS_WIDTH, i); ctx.stroke();
+    }
+
+    // 3. Food
     ctx.fillStyle = PALETTE.dangerRed;
     const food = foodRef.current;
     ctx.shadowBlur = 10; ctx.shadowColor = PALETTE.dangerRed;
     ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     ctx.shadowBlur = 0;
 
-    // Obstacles
-    ctx.fillStyle = '#555'; 
+    // 4. Obstacles (Hard Mode)
+    ctx.fillStyle = '#666'; // Visible Grey Blocks
     obstaclesRef.current.forEach(obs => {
         ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
     });
 
-    // Snake
+    // 5. Snake (Old Style)
     const snake = snakeRef.current;
     snake.forEach((segment, index) => {
       ctx.fillStyle = index === 0 ? PALETTE.neonSnekGreen : PALETTE.rushPurple;
@@ -93,7 +102,7 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
       case 'RIGHT': head.x += 1; break;
     }
 
-    // Always Wrap
+    // Wrap Around (Old Style Logic)
     const maxGridX = CANVAS_WIDTH / GRID_SIZE;
     const maxGridY = CANVAS_HEIGHT / GRID_SIZE;
     if (head.x < 0) head.x = maxGridX - 1;
@@ -108,7 +117,7 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
       }
     }
 
-    // Obstacle Collision
+    // Obstacle Collision (Hard Mode)
     if (phase === 'HARD') {
         for (const obs of obstaclesRef.current) {
             if (head.x === obs.x && head.y === obs.y) {
@@ -126,13 +135,15 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
       setScore(newScore);
       foodRef.current = getRandomPoint();
 
-      // FIX: SPEED SCALING (x2 every 30 points)
-      if (newScore > 0 && newScore % 30 === 0) {
-          // speed / 2 = double speed. Cap at 30ms to prevent bugs.
-          speedRef.current = Math.max(30, speedRef.current / 2); 
+      // --- SPEED LOGIC UPDATE ---
+      // Every 40 points, increase speed moderately (reduce delay by 15%)
+      // Cap at 60ms so it doesn't become instant.
+      if (newScore > 0 && newScore % 40 === 0) {
+          speedRef.current = Math.max(60, Math.floor(speedRef.current * 0.85));
           restartLoop(); 
       }
 
+      // Hard Mode Check
       if (newScore === 200 && phase === 'NORMAL') {
           onPhaseTransition();
       }
@@ -178,7 +189,7 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
   }, [isPaused]);
 
   useEffect(() => {
-    speedRef.current = 400; // Reset to slow speed on mount
+    speedRef.current = 250; // Start Slow
     restartLoop();
     return () => { if (gameLoopRef.current) clearInterval(gameLoopRef.current); };
   }, []);
@@ -188,20 +199,11 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
   }, []);
 
   return (
-    <div className="flex flex-col items-center w-full">
-      {/* HUD - Centered Life Bar */}
-      <div className="flex justify-between items-center w-full max-w-[360px] mb-4 font-mono text-xl font-bold">
-        {/* Left: Score */}
-        <div className="text-neon-green w-24">SCORE: {score}</div>
-        
-        {/* Center: Lives */}
-        <div className="flex items-center gap-2 text-danger-red">
-            <Heart size={24} fill="currentColor" />
-            <span>{lives}</span>
-        </div>
-
-        {/* Right: Phase */}
-        <div className={`w-24 text-right ${phase === 'HARD' ? 'text-danger-red animate-pulse' : 'text-gray-400'}`}>
+    <div className="flex flex-col items-center">
+      {/* HUD: Score - Phase (Lives moved to parent Page.tsx) */}
+      <div className="flex justify-between w-full max-w-[360px] mb-4 font-mono text-xl font-bold">
+        <div className="text-neon-green">SCORE: {score}</div>
+        <div className={phase === 'HARD' ? 'text-danger-red animate-pulse' : 'text-gray-400'}>
             {phase}
         </div>
       </div>
@@ -216,8 +218,11 @@ export default function GameCanvas({ phase, lives, onGameOver, onPhaseTransition
         />
       </div>
 
-      <DirectionButtons onDirectionChange={handleDirection} />
-      <p className="mt-4 text-xs text-gray-500">Use arrow keys or swipe to control the snake.</p>
+      {/* NEW CONTROLS with Center Button Logic */}
+      <DirectionButtons 
+        onDirectionChange={handleDirection} 
+        onEndGame={() => gameOver()} 
+      />
     </div>
   );
 }
