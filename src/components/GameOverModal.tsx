@@ -1,6 +1,7 @@
 'use client';
 
-import { Trophy, RefreshCcw } from 'lucide-react';
+import { Trophy, RefreshCcw, House } from 'lucide-react';
+import Link from 'next/link';
 
 interface GameOverModalProps {
   score: number;
@@ -62,6 +63,15 @@ export default function GameOverModal({
             <RefreshCcw size={18} />
             PLAY AGAIN
           </button>
+
+          {/* HOME BUTTON */}
+          <Link 
+            href="/"
+            className="w-full py-3 bg-transparent border-2 border-gray-700 text-gray-400 font-bold rounded-xl hover:bg-gray-800 hover:text-white transition-colors flex items-center justify-center gap-2"
+          >
+            <House size={18} />
+            BACK TO HOME
+          </Link>
         </div>
       </div>
     </div>
