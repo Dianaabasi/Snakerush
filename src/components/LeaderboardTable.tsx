@@ -6,6 +6,7 @@ export interface LeaderboardEntry {
   pfpUrl: string;
   score: number;
   rank: number;
+  earnings?: number; // Add earnings field
 }
 
 interface LeaderboardTableProps {
@@ -17,9 +18,9 @@ export default function LeaderboardTable({ entries, currentUserFid }: Leaderboar
   
   const getRankIcon = (rank: number) => {
     switch(rank) {
-      case 1: return <Trophy size={20} className="text-[#FFD700]" />; // Gold
-      case 2: return <Medal size={20} className="text-[#C0C0C0]" />;  // Silver
-      case 3: return <Medal size={20} className="text-[#CD7F32]" />;  // Bronze
+      case 1: return <Trophy size={20} className="text-[#FFD700]" />; 
+      case 2: return <Medal size={20} className="text-[#C0C0C0]" />;  
+      case 3: return <Medal size={20} className="text-[#CD7F32]" />;  
       default: return <span className="font-mono text-gray-500">#{rank}</span>;
     }
   };
@@ -27,9 +28,10 @@ export default function LeaderboardTable({ entries, currentUserFid }: Leaderboar
   return (
     <div className="w-full max-w-sm bg-console-grey rounded-xl border border-gray-800 overflow-hidden">
       <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-black/20">
-        <span className="text-xs font-bold text-gray-500 uppercase">Rank</span>
-        <span className="text-xs font-bold text-gray-500 uppercase">Player</span>
-        <span className="text-xs font-bold text-gray-500 uppercase">Score</span>
+        <span className="text-xs font-bold text-gray-500 uppercase w-8 text-center">#</span>
+        <span className="text-xs font-bold text-gray-500 uppercase flex-1 px-2">Player</span>
+        <span className="text-xs font-bold text-gray-500 uppercase w-12 text-right">Score</span>
+        <span className="text-xs font-bold text-gray-500 uppercase w-16 text-right">Earn</span>
       </div>
 
       <div className="divide-y divide-gray-800">
@@ -41,34 +43,33 @@ export default function LeaderboardTable({ entries, currentUserFid }: Leaderboar
           entries.map((entry) => (
             <div 
               key={entry.fid}
-              className={`flex items-center justify-between p-4 hover:bg-white/5 transition-colors
+              className={`flex items-center justify-between p-3 hover:bg-white/5 transition-colors
                 ${entry.fid === currentUserFid ? 'bg-rush-purple/20 border-l-4 border-rush-purple' : ''}
               `}
             >
-              {/* Rank Column */}
               <div className="w-8 flex justify-center">
                 {getRankIcon(entry.rank)}
               </div>
 
-              {/* User Column */}
-              <div className="flex-1 flex items-center gap-3 px-2">
-                <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex-shrink-0">
+              <div className="flex-1 flex items-center gap-2 px-2 overflow-hidden">
+                <div className="w-6 h-6 rounded-full bg-gray-700 overflow-hidden flex-shrink-0">
                   {entry.pfpUrl ? (
                     <img src={entry.pfpUrl} alt={entry.username} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center"><User size={14}/></div>
+                    <div className="w-full h-full flex items-center justify-center"><User size={12}/></div>
                   )}
                 </div>
-                <div className="flex flex-col">
-                  <span className={`text-sm font-bold ${entry.fid === currentUserFid ? 'text-neon-green' : 'text-white'}`}>
-                    {entry.username || `FID: ${entry.fid}`}
-                  </span>
-                </div>
+                <span className={`text-sm font-bold truncate ${entry.fid === currentUserFid ? 'text-neon-green' : 'text-white'}`}>
+                  {entry.username || `FID: ${entry.fid}`}
+                </span>
               </div>
 
-              {/* Score Column */}
-              <div className="text-right font-mono font-bold text-white">
+              <div className="w-12 text-right font-mono font-bold text-white text-sm">
                 {entry.score}
+              </div>
+
+              <div className="w-16 text-right font-mono font-bold text-neon-green text-xs">
+                {entry.earnings ? `$${entry.earnings.toFixed(2)}` : '-'}
               </div>
             </div>
           ))

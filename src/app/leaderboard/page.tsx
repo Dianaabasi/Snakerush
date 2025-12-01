@@ -31,27 +31,33 @@ export default function LeaderboardPage() {
         // 1. Get Reward Pool
         const weekID = getCurrentWeekID();
         const campaignSnap = await getDoc(doc(db, 'campaigns', weekID));
-        if (campaignSnap.exists()) {
-            setRewardPool(campaignSnap.data().poolTotal || 0);
-        }
+        const pool = campaignSnap.exists() ? (campaignSnap.data().poolTotal || 0) : 0;
+        setRewardPool(pool);
 
-        // 2. Query Firestore for Leaderboard
+        // 2. Query Firestore
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy('weeklyScore', 'desc'), limit(20));
-        
         const querySnapshot = await getDocs(q);
+        
         const data: LeaderboardEntry[] = [];
         let rank = 1;
 
         querySnapshot.forEach((doc) => {
           const userData = doc.data();
           if (userData.weeklyScore > 0) {
+            // Calculate earnings for top 5
+            let earnings = 0;
+            if (rank <= 5) {
+                earnings = pool * REWARDS[rank - 1];
+            }
+
             data.push({
               fid: userData.fid,
               username: userData.username || 'Unknown',
               pfpUrl: userData.pfpUrl || '',
               score: userData.weeklyScore || 0,
-              rank: rank++
+              rank: rank++,
+              earnings: earnings > 0 ? earnings : undefined
             });
           }
         });
@@ -69,8 +75,6 @@ export default function LeaderboardPage() {
 
   return (
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
-      
-      {/* HEADER */}
       <div className="w-full flex justify-start px-4 pt-6">
         <Link href="/"><div className="relative w-32 h-10"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div></Link>
       </div>
@@ -90,20 +94,7 @@ export default function LeaderboardPage() {
         </div>
       ) : (
         <div className="w-full max-w-sm">
-            {/* INJECT EARNINGS INTO TABLE DISPLAY if you modify table, or just show list here */}
-            {/* For now, reusing existing table but users can infer earnings */}
             <LeaderboardTable entries={entries} currentUserFid={context?.user?.fid} />
-            
-            {/* EARNINGS BREAKDOWN */}
-            <div className="mt-6 bg-[#1E1E24] p-4 rounded-xl text-left border border-gray-800">
-                <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Estimated Earnings</h3>
-                {entries.slice(0, 5).map((entry, idx) => (
-                    <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-800 last:border-0">
-                        <span className="text-white">#{idx+1} {entry.username}</span>
-                        <span className="text-neon-green font-mono">${(rewardPool * REWARDS[idx]).toFixed(2)}</span>
-                    </div>
-                ))}
-            </div>
         </div>
       )}
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added onSnapshot for realtime updates
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
@@ -14,22 +14,18 @@ import ThemeToggle from '@/components/ThemeToggle';
 type FrameContext = Awaited<typeof sdk.context>;
 
 // CONFIG: Price per 2 lives (1 ticket)
-// Using 0.00001 for testing as requested. Real world $1 ~= 0.0003 ETH
 const UNIT_PRICE_ETH = 0.00001; 
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<FrameContext>();
   
-  // Game Economy State
   const [lives, setLives] = useState(0);
   const [rewardPool, setRewardPool] = useState(0);
   
-  // UI State
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
-  // --- REALTIME DATA LISTENER ---
   useEffect(() => {
     let unsubscribeUser: () => void;
     let unsubscribePool: () => void;
@@ -42,23 +38,13 @@ export default function HomePage() {
         setIsSDKLoaded(true);
 
         if (ctx?.user?.fid) {
-          // 1. Listen to User Lives
           unsubscribeUser = onSnapshot(doc(db, 'users', ctx.user.fid.toString()), (doc) => {
-            if (doc.exists()) {
-              setLives(doc.data().lives || 0);
-            } else {
-              setLives(0);
-            }
+            setLives(doc.exists() ? (doc.data().lives || 0) : 0);
           });
 
-          // 2. Listen to Reward Pool
           const weekID = getCurrentWeekID();
           unsubscribePool = onSnapshot(doc(db, 'campaigns', weekID), (doc) => {
-            if (doc.exists()) {
-              setRewardPool(doc.data().poolTotal || 0);
-            } else {
-              setRewardPool(0); // Default if no games played yet
-            }
+            setRewardPool(doc.exists() ? (doc.data().poolTotal || 0) : 0);
           });
         }
       } catch (err) {
@@ -74,7 +60,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // --- RENDER HELPERS ---
   const packages = [
     { tickets: 1, lives: 2, price: UNIT_PRICE_ETH * 1 },
     { tickets: 2, lives: 4, price: UNIT_PRICE_ETH * 2 },
@@ -82,6 +67,11 @@ export default function HomePage() {
     { tickets: 4, lives: 8, price: UNIT_PRICE_ETH * 4 },
     { tickets: 5, lives: 10, price: UNIT_PRICE_ETH * 5 },
   ];
+
+  // Helper to check if package is valid based on current lives
+  const canBuyPackage = (packageLives: number) => {
+    return (lives + packageLives) <= 10;
+  };
 
   if (!isSDKLoaded) {
     return (
@@ -95,13 +85,11 @@ export default function HomePage() {
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
       <div className="absolute top-0 right-0 z-20"><ThemeToggle /></div>
 
-      {/* HEADER */}
       <div className="mt-8 mb-2 flex flex-col items-center">
-        <div className="relative w-64 h-24">
+        <div className="relative w-80 h-32">
           <Image src="/logo.png" alt="SnakeRush Logo" fill className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]" priority />
         </div>
         
-        {/* REWARD POOL DISPLAY */}
         <div className="bg-gradient-to-r from-yellow-600 to-yellow-800 text-white px-6 py-2 rounded-full font-black text-sm shadow-[0_0_15px_rgba(255,215,0,0.5)] flex items-center gap-2 mb-2">
           <Trophy size={16} />
           <span>POOL: ${rewardPool.toFixed(2)}</span>
@@ -112,7 +100,6 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* INSTRUCTIONS */}
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">How to Play</h2>
         <ul className="text-sm text-gray-300 space-y-2 list-none font-medium">
@@ -124,17 +111,14 @@ export default function HomePage() {
         </ul>
       </div>
 
-      {/* ACTION AREA */}
       <div className="w-full max-w-sm flex flex-col gap-4">
         
-        {/* LIVES INDICATOR */}
         <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 rounded-xl border border-gray-300 dark:border-gray-700">
           <div className="flex items-center gap-2 text-red-600 dark:text-danger-red font-black">
             <Heart fill="currentColor" />
             <span className="text-xl">{lives} / 10</span>
           </div>
           
-          {/* MINT BUTTON (Triggers Store Modal) */}
           <button 
             onClick={() => setIsStoreOpen(true)}
             disabled={lives > 8}
@@ -148,7 +132,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* JOIN GAME BUTTON */}
         {lives > 0 ? (
           <Link href="/game" className="block w-full">
             <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
@@ -162,7 +145,6 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* STORE MODAL */}
       {isStoreOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-[#1E1E24] border-2 border-rush-purple rounded-2xl w-full max-w-sm overflow-hidden relative">
@@ -179,21 +161,31 @@ export default function HomePage() {
 
               {!selectedPackage ? (
                 <div className="space-y-3">
-                  {packages.map((pkg, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedPackage(idx)}
-                      className="w-full flex justify-between items-center bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 transition-all group"
-                    >
-                      <div className="flex flex-col items-start">
-                        <span className="text-rush-purple font-bold">{pkg.tickets} Ticket{pkg.tickets > 1 ? 's' : ''}</span>
-                        <span className="text-white text-lg font-black">{pkg.lives} Lives</span>
-                      </div>
-                      <div className="bg-gray-900 px-3 py-1 rounded-lg text-neon-green font-mono">
-                        {pkg.price.toFixed(5)} ETH
-                      </div>
-                    </button>
-                  ))}
+                  {packages.map((pkg, idx) => {
+                    const isBuyable = canBuyPackage(pkg.lives);
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => isBuyable && setSelectedPackage(idx)}
+                        disabled={!isBuyable}
+                        className={`w-full flex justify-between items-center p-4 rounded-xl border transition-all
+                          ${isBuyable 
+                            ? 'bg-gray-800 hover:bg-gray-700 border-gray-700 cursor-pointer' 
+                            : 'bg-gray-900 border-gray-800 opacity-50 cursor-not-allowed'}`}
+                      >
+                        <div className="flex flex-col items-start">
+                          <span className="text-rush-purple font-bold">{pkg.tickets} Ticket{pkg.tickets > 1 ? 's' : ''}</span>
+                          <span className="text-white text-lg font-black">{pkg.lives} Lives</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                           <span className="bg-gray-900 px-3 py-1 rounded-lg text-neon-green font-mono mb-1">
+                             {pkg.price.toFixed(5)}
+                           </span>
+                           {!isBuyable && <span className="text-[10px] text-red-500 font-bold">Max Limit</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="animate-fade-in">

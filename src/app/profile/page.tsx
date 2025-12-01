@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, collection, getDocs, query } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
-import { User, Ticket, Calendar, House, Trophy } from 'lucide-react';
+import { User, Heart, Calendar, House, Trophy } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
 
-// Helper type
 type FrameContext = Awaited<typeof sdk.context>;
 
 // --- DATE HELPER ---
@@ -46,7 +45,9 @@ export default function ProfilePage() {
   const [weekStats, setWeekStats] = useState<DayStat[]>([]);
   const [totalScore, setTotalScore] = useState(0);
   const [todayScore, setTodayScore] = useState(0);
-  const [hasTicket, setHasTicket] = useState(false);
+  
+  // FIX: Track Lives instead of Ticket
+  const [lives, setLives] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -58,34 +59,36 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
+    let unsubscribeUser: () => void;
+
     const fetchData = async () => {
       if (!context?.user?.fid) return;
 
       const fid = context.user.fid;
-      const fidString = fid.toString(); // FIX: Ensure string ID
+      const fidString = fid.toString();
       const weekDates = getWeekDates();
-      const currentWeekID = getCurrentWeekID();
       const todayStr = new Date().toISOString().split('T')[0];
 
       try {
-        // A. Check Ticket Status
-        const ticketDocID = `${fidString}_${currentWeekID}`;
-        console.log(`👤 Checking Profile Ticket: ${ticketDocID}`);
+        // A. Listen for Realtime Lives (Replaces Ticket Check)
+        const userRef = doc(db, 'users', fidString);
         
-        const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
-        if (ticketSnap.exists() && ticketSnap.data().paid) {
-          setHasTicket(true);
-        } else {
-          setHasTicket(false);
-        }
-
-        // B. Fetch Daily Scores
+        // Initial Fetch for Scores
         const scoresRef = collection(db, 'users', fidString, 'dailyScores');
         const scoresSnap = await getDocs(scoresRef);
         
         const scoreMap = new Map<string, number>();
         scoresSnap.forEach(doc => {
           scoreMap.set(doc.id, doc.data().bestScore);
+        });
+
+        // B. Realtime Listener for Lives
+        unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setLives(docSnap.data().lives || 0);
+            } else {
+                setLives(0);
+            }
         });
 
         // C. Build Stats
@@ -118,6 +121,10 @@ export default function ProfilePage() {
     };
 
     fetchData();
+
+    return () => {
+        if (unsubscribeUser) unsubscribeUser();
+    };
   }, [context]);
 
   if (loading) {
@@ -142,25 +149,24 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-        {/* FIX: Dark text in light mode */}
         <h1 className="text-2xl font-black text-gray-900 dark:text-white">
           {context?.user?.displayName || "Player"}
         </h1>
+        <p className="text-gray-500 text-xs font-mono">FID: {context?.user?.fid}</p>
       </div>
 
-      {/* TICKET STATUS BADGE */}
+      {/* FIX: LIVES STATUS BADGE (Replaces Ticket Badge) */}
       <div className={`
-        flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold mb-8 border
-        ${hasTicket 
-          ? 'bg-green-100 dark:bg-green-900/30 border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green' 
-          : 'bg-red-100 dark:bg-red-900/30 border-red-600 dark:border-danger-red text-red-800 dark:text-danger-red'}
+        flex items-center gap-2 px-6 py-2 rounded-full text-sm font-bold mb-8 border transition-all
+        ${lives > 0 
+          ? 'bg-green-100 dark:bg-green-900/30 border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green shadow-lg' 
+          : 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-600 dark:text-gray-400'}
       `}>
-        <Ticket size={16} />
-        {hasTicket ? 'WEEKLY PASS ACTIVE' : 'NO ACTIVE PASS'}
+        <Heart size={16} fill={lives > 0 ? "currentColor" : "none"} />
+        {lives > 0 ? `${lives} LIVES AVAILABLE` : 'NO LIVES REMAINING'}
       </div>
 
       {/* MAIN STATS ROW */}
-      {/* FIX: Forced dark background cards for readability of neon numbers */}
       <div className="flex w-full gap-4 mb-6">
         <div className="flex-1 bg-[#1E1E24] p-4 rounded-xl border border-gray-800 flex flex-col items-center shadow-md">
           <span className="text-gray-400 text-[10px] uppercase font-bold">Total Weekly</span>
@@ -179,7 +185,6 @@ export default function ProfilePage() {
 
       {/* HISTORY / DETAILS LIST */}
       <div className="w-full mt-6">
-        {/* FIX: Header Color */}
         <h3 className="text-left text-gray-900 dark:text-white font-bold mb-3 flex items-center gap-2">
           <Calendar size={16} className="text-rush-purple"/> 
           Daily Breakdown
@@ -189,7 +194,6 @@ export default function ProfilePage() {
           {weekStats.map((day) => (
             <div 
               key={day.date} 
-              // FIX: Forced dark background for list items so neon text pops
               className={`flex justify-between items-center p-3 rounded-lg border border-gray-800 
                 ${day.played ? 'bg-[#1E1E24]' : 'bg-gray-100 dark:bg-gray-900 opacity-60'}`}
             >

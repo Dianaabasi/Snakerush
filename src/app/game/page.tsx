@@ -2,33 +2,32 @@
 
 import { useState, useEffect } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; // Using runTransaction for safety
+import { doc, runTransaction, getDoc, serverTimestamp, increment } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
 import GameOverModal from '@/components/GameOverModal';
 import { getCurrentWeekID } from '@/lib/utils';
-import { Heart } from 'lucide-react';
+import Link from 'next/link'; // Added for Back to Home button
+import { ShoppingCart } from 'lucide-react'; // Icon for store
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// Config: Value added to pool per game ($0.50 value * 50% = $0.25)
 const POOL_CONTRIBUTION = 0.25;
 
 export default function GamePage() {
   const [context, setContext] = useState<FrameContext>();
-  const [gameState, setGameState] = useState<'LOADING' | 'PLAYING' | 'PAUSED' | 'OVER'>('LOADING');
+  // Added 'NO_LIVES' state
+  const [gameState, setGameState] = useState<'LOADING' | 'NO_LIVES' | 'PLAYING' | 'PAUSED' | 'OVER'>('LOADING');
   const [finalScore, setFinalScore] = useState(0);
-  const [lives, setLives] = useState<number | null>(null);
+  const [lives, setLives] = useState<number>(0);
   
   const [gameResetKey, setGameResetKey] = useState(0);
-  const [gamePhase, setGamePhase] = useState<GamePhase>('NORMAL'); // Track phase for popups
+  const [gamePhase, setGamePhase] = useState<GamePhase>('NORMAL');
 
-  // Claiming
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimStatus, setClaimStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
-  // Load User & Start Game Logic
   useEffect(() => {
     const init = async () => {
       const ctx = await sdk.context;
@@ -36,14 +35,35 @@ export default function GamePage() {
       sdk.actions.ready();
 
       if (ctx?.user?.fid) {
-        await startGameTransaction(ctx.user.fid);
+        await checkLivesAndStart(ctx.user.fid);
       }
     };
     init();
   }, []);
 
-  // --- CORE LOGIC: START GAME TRANSACTION ---
-  // Deduct 1 life, Add to Pool
+  // --- CORE LOGIC ---
+  const checkLivesAndStart = async (fid: number) => {
+    const userRef = doc(db, 'users', fid.toString());
+    
+    try {
+        // 1. Check Lives First
+        const userSnap = await getDoc(userRef);
+        const currentLives = userSnap.exists() ? (userSnap.data().lives || 0) : 0;
+        setLives(currentLives);
+
+        if (currentLives <= 0) {
+            setGameState('NO_LIVES');
+            return;
+        }
+
+        // 2. If lives exist, run transaction to deduct 1 and start
+        await startGameTransaction(fid);
+
+    } catch (e) {
+        console.error("Init Error:", e);
+    }
+  };
+
   const startGameTransaction = async (fid: number) => {
     const weekID = getCurrentWeekID();
     const userRef = doc(db, 'users', fid.toString());
@@ -57,24 +77,20 @@ export default function GamePage() {
         const currentLives = userDoc.data().lives || 0;
         if (currentLives < 1) throw "Not enough lives";
 
-        // Deduct Life
         transaction.update(userRef, { lives: currentLives - 1 });
         
-        // Add to Pool (Initialize if doesn't exist)
         transaction.set(campaignRef, { 
           poolTotal: increment(POOL_CONTRIBUTION) 
         }, { merge: true });
 
-        setLives(currentLives - 1); // Update local state
+        setLives(currentLives - 1); 
       });
 
-      // Success! Start the game
       setGameState('PLAYING');
       
     } catch (e) {
       console.error("Game Start Error:", e);
-      alert("Could not start game: " + e);
-      window.location.href = "/"; // Go back home if failed
+      setGameState('NO_LIVES'); // Fallback if transaction fails due to lives
     }
   };
 
@@ -85,28 +101,25 @@ export default function GamePage() {
     setGameState('OVER');
   };
 
-  // Called by Canvas when score hits 200
   const handlePhaseTransition = () => {
-    setGameState('PAUSED'); // Shows the "Hard Mode" modal
+    setGameState('PAUSED'); 
   };
 
   const resumeGame = () => {
-    setGamePhase('HARD'); // Tell canvas to switch modes
-    setGameState('PLAYING'); // Resume loop
+    setGamePhase('HARD'); 
+    setGameState('PLAYING'); 
   };
 
   const handleClaim = async () => {
     if (!context?.user?.fid) return;
     setIsClaiming(true);
     
-    // ... (Same Claim Logic as before, just kept concise here)
     const fidString = context.user.fid.toString();
     const dateKey = new Date().toISOString().split('T')[0];
     const userRef = doc(db, 'users', fidString);
     const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
 
     try {
-        // Run transaction to verify high score
         await runTransaction(db, async (t) => {
             const dailyDoc = await t.get(dailyScoreRef);
             const currentBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
@@ -140,8 +153,27 @@ export default function GamePage() {
   if (gameState === 'LOADING') {
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-neon-green animate-pulse">
-            <div className="text-2xl font-bold">STARTING GAME...</div>
-            <p className="text-xs text-gray-500">Spending 1 Life...</p>
+            <div className="text-2xl font-bold">Checking Lives...</div>
+        </div>
+    );
+  }
+
+  // NEW: No Lives View
+  if (gameState === 'NO_LIVES') {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">
+            <div className="text-6xl">💔</div>
+            <h1 className="text-3xl font-black text-danger-red">OUT OF LIVES</h1>
+            <p className="text-gray-400 text-sm max-w-xs">
+                You need lives to play. Buy a ticket to replenish your energy!
+            </p>
+            
+            <Link href="/" className="w-full max-w-xs">
+                <button className="w-full bg-rush-purple hover:bg-purple-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(138,43,226,0.4)]">
+                    <ShoppingCart size={20} />
+                    GET TICKETS
+                </button>
+            </Link>
         </div>
     );
   }
@@ -149,25 +181,20 @@ export default function GamePage() {
   return (
     <div className="relative w-full flex flex-col items-center">
         
-        {/* TOP HUD */}
-        <div className="absolute top-2 right-4 z-10 flex items-center gap-1 text-red-500 font-black bg-black/50 px-3 py-1 rounded-full">
-            <Heart size={16} fill="currentColor" />
-            <span>{lives}</span>
-        </div>
-
         {/* CANVAS ENGINE */}
         <GameCanvas 
             key={gameResetKey} 
-            phase={gamePhase} // Pass phase down
+            phase={gamePhase} 
+            lives={lives} // Pass lives to display in HUD
             onGameOver={handleGameOver}
-            onPhaseTransition={handlePhaseTransition} // Callback for 200pts
-            isPaused={gameState === 'PAUSED'} // Stop loop if paused
+            onPhaseTransition={handlePhaseTransition} 
+            isPaused={gameState === 'PAUSED'} 
         />
 
-        {/* END GAME BUTTON (Manual Quit) */}
+        {/* END GAME BUTTON */}
         {gameState === 'PLAYING' && (
             <button 
-                onClick={() => handleGameOver(finalScore)} // Pass current score? Need to get from canvas ref ideally, but for now simple quit
+                onClick={() => handleGameOver(finalScore)}
                 className="mt-6 border-2 border-red-900/50 text-red-900 dark:text-red-500 px-6 py-2 rounded-full font-bold text-xs hover:bg-red-900/20"
             >
                 END GAME
@@ -196,7 +223,7 @@ export default function GamePage() {
                 score={finalScore}
                 isClaiming={isClaiming}
                 onClaim={handleClaim}
-                onReplay={() => window.location.reload()} // Replay requires reload to pay life again
+                onReplay={() => window.location.reload()} 
                 claimStatus={claimStatus}
             />
         )}

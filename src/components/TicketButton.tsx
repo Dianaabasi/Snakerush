@@ -33,6 +33,7 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     return () => clearTimeout(timer);
   }, []);
 
+  // FIX: Added ethPrice to dependencies so it updates when prop changes
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     return [
@@ -59,7 +60,6 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     const purchaseRef = doc(db, 'purchases', `${fid}_${Date.now()}`);
 
     try {
-      // 1. Record the Purchase
       await setDoc(purchaseRef, {
         fid,
         lives: livesToMint,
@@ -68,7 +68,6 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
         timestamp: serverTimestamp(),
       });
 
-      // 2. Increment Lives in User Profile
       await setDoc(userRef, {
         lives: increment(livesToMint),
         lastPurchase: serverTimestamp()
