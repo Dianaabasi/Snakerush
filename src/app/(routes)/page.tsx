@@ -2,87 +2,87 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added onSnapshot for realtime updates
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
 import Image from 'next/image'; 
 import TicketButton from '@/components/TicketButton';
-import { House, Trophy, User } from 'lucide-react'; 
+import { House, Trophy, User, Heart, X, ShoppingCart } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
 
 type FrameContext = Awaited<typeof sdk.context>;
 
+// CONFIG: Price per 2 lives (1 ticket)
+// Using 0.00001 for testing as requested. Real world $1 ~= 0.0003 ETH
+const UNIT_PRICE_ETH = 0.00001; 
+
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<FrameContext>();
-  const [hasTicket, setHasTicket] = useState(false);
   
-  // FIX: Separate 'checking' state from 'loading app' state
-  const [isCheckingTicket, setIsCheckingTicket] = useState(false); 
+  // Game Economy State
+  const [lives, setLives] = useState(0);
+  const [rewardPool, setRewardPool] = useState(0);
+  
+  // UI State
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
-  // --- TICKET CHECKER ---
-  const checkTicketStatus = useCallback(async (fid: number) => {
-    setIsCheckingTicket(true);
-    const weekID = getCurrentWeekID();
-    
-    // FIX: Explicit string conversion
-    const ticketDocID = `${fid.toString()}_${weekID}`; 
-
-    console.log(`Checking ticket for: ${ticketDocID}`);
-
-    try {
-      const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
-      if (ticketSnap.exists() && ticketSnap.data().paid) {
-        console.log("✅ Ticket found in DB!");
-        setHasTicket(true);
-      } else {
-        console.log("❌ No active ticket found.");
-      }
-    } catch (error) {
-      console.error("Error checking ticket:", error);
-    } finally {
-      setIsCheckingTicket(false);
-    }
-  }, []);
-
-  // --- INITIALIZATION ---
+  // --- REALTIME DATA LISTENER ---
   useEffect(() => {
-    let isMounted = true;
+    let unsubscribeUser: () => void;
+    let unsubscribePool: () => void;
 
-    const init = async () => {
+    const setupListeners = async () => {
       try {
         const ctx = await sdk.context;
-        if (!isMounted) return;
-        
         setContext(ctx);
         sdk.actions.ready();
         setIsSDKLoaded(true);
 
         if (ctx?.user?.fid) {
-          await checkTicketStatus(ctx.user.fid);
+          // 1. Listen to User Lives
+          unsubscribeUser = onSnapshot(doc(db, 'users', ctx.user.fid.toString()), (doc) => {
+            if (doc.exists()) {
+              setLives(doc.data().lives || 0);
+            } else {
+              setLives(0);
+            }
+          });
+
+          // 2. Listen to Reward Pool
+          const weekID = getCurrentWeekID();
+          unsubscribePool = onSnapshot(doc(db, 'campaigns', weekID), (doc) => {
+            if (doc.exists()) {
+              setRewardPool(doc.data().poolTotal || 0);
+            } else {
+              setRewardPool(0); // Default if no games played yet
+            }
+          });
         }
       } catch (err) {
         console.error("SDK Init Error:", err);
       }
     };
 
-    init();
-    return () => { isMounted = false; };
-  }, [checkTicketStatus]);
+    setupListeners();
 
-  // --- HANDLER for successful purchase ---
-  const handleTicketPurchased = () => {
-    // 1. Optimistically update UI so user doesn't have to refresh
-    setHasTicket(true);
-    
-    // 2. Double check DB in background just in case
-    if (context?.user?.fid) {
-      checkTicketStatus(context.user.fid);
-    }
-  };
+    return () => {
+      if (unsubscribeUser) unsubscribeUser();
+      if (unsubscribePool) unsubscribePool();
+    };
+  }, []);
 
-  // --- RENDER ---
+  // --- RENDER HELPERS ---
+  const packages = [
+    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH * 1 },
+    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH * 2 },
+    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH * 3 },
+    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH * 4 },
+    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH * 5 },
+  ];
+
   if (!isSDKLoaded) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse">
@@ -95,60 +95,141 @@ export default function HomePage() {
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
       <div className="absolute top-0 right-0 z-20"><ThemeToggle /></div>
 
+      {/* HEADER */}
       <div className="mt-8 mb-2 flex flex-col items-center">
-        <div className="relative w-80 h-40">
+        <div className="relative w-64 h-24">
           <Image src="/logo.png" alt="SnakeRush Logo" fill className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]" priority />
         </div>
-        <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
-          Weekly Campaign: <span className="ml-2 text-green-800 dark:text-neon-green font-black">{getCurrentWeekID()}</span>
+        
+        {/* REWARD POOL DISPLAY */}
+        <div className="bg-gradient-to-r from-yellow-600 to-yellow-800 text-white px-6 py-2 rounded-full font-black text-sm shadow-[0_0_15px_rgba(255,215,0,0.5)] flex items-center gap-2 mb-2">
+          <Trophy size={16} />
+          <span>POOL: ${rewardPool.toFixed(2)}</span>
+        </div>
+
+        <p className="text-gray-600 dark:text-gray-400 text-xs font-mono font-bold">
+          Weekly Campaign: <span className="ml-1 text-green-800 dark:text-neon-green">{getCurrentWeekID()}</span>
         </p>
       </div>
 
-      {/* Instructions Card: Forced Dark Style for Contrast */}
+      {/* INSTRUCTIONS */}
       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">How to Play</h2>
-        <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
-          <li>Get the highest score for the day.</li>
-          <li><span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.</li>
-          <li><span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.</li>
+        <ul className="text-sm text-gray-300 space-y-2 list-none font-medium">
+          <li>🎫 <strong>Buy Tickets</strong> to get Lives</li>
+          <li>🕹️ <strong>Join Game</strong> (Costs 1 Life)</li>
+          <li>📅 Get highest score for the <strong>Day</strong></li>
+          <li>🏆 Rank up <strong>Top 5 Weekly</strong></li>
+          <li>💰 <strong>Earn</strong> % of the Reward Pool</li>
         </ul>
       </div>
 
+      {/* ACTION AREA */}
       <div className="w-full max-w-sm flex flex-col gap-4">
-        {hasTicket ? (
-          <div className="animate-fade-in">
-            <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
-              ✅ TICKET ACTIVE
-            </div>
-            <Link href="/game" className="block w-full">
-              <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
-                JOIN GAME
-              </button>
-            </Link>
+        
+        {/* LIVES INDICATOR */}
+        <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 rounded-xl border border-gray-300 dark:border-gray-700">
+          <div className="flex items-center gap-2 text-red-600 dark:text-danger-red font-black">
+            <Heart fill="currentColor" />
+            <span className="text-xl">{lives} / 10</span>
           </div>
+          
+          {/* MINT BUTTON (Triggers Store Modal) */}
+          <button 
+            onClick={() => setIsStoreOpen(true)}
+            disabled={lives > 8}
+            className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2
+              ${lives > 8 
+                ? 'bg-gray-400 cursor-not-allowed opacity-50' 
+                : 'bg-rush-purple hover:bg-purple-600 text-white shadow-lg'}`}
+          >
+            <ShoppingCart size={16} />
+            {lives > 8 ? 'MAX LIVES' : 'BUY LIVES'}
+          </button>
+        </div>
+
+        {/* JOIN GAME BUTTON */}
+        {lives > 0 ? (
+          <Link href="/game" className="block w-full">
+            <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
+              START GAME (-1 LIFE)
+            </button>
+          </Link>
         ) : (
-          <div className="animate-fade-in">
-             {isCheckingTicket ? (
-                <div className="text-sm text-gray-500 animate-pulse py-4">Verifying Ticket...</div>
-             ) : (
-               context?.user?.fid && (
-                 <TicketButton 
-                   fid={context.user.fid} 
-                   onTicketPurchased={handleTicketPurchased} 
-                 />
-               )
-             )}
-            
-            {!hasTicket && !isCheckingTicket && (
-               <button className="w-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-400 font-bold py-4 rounded-xl mt-4 cursor-not-allowed opacity-50 border border-gray-300 dark:border-transparent">
-                 JOIN GAME (LOCKED)
-               </button>
-            )}
-          </div>
+          <button onClick={() => setIsStoreOpen(true)} className="w-full bg-gray-500 text-white font-bold py-4 rounded-xl shadow-lg">
+            NO LIVES - BUY NOW
+          </button>
         )}
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
+      {/* STORE MODAL */}
+      {isStoreOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-[#1E1E24] border-2 border-rush-purple rounded-2xl w-full max-w-sm overflow-hidden relative">
+            <button 
+              onClick={() => { setIsStoreOpen(false); setSelectedPackage(null); }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              <X size={24} />
+            </button>
+            
+            <div className="p-6">
+              <h2 className="text-2xl font-black text-white mb-1">TICKET STORE</h2>
+              <p className="text-xs text-gray-400 mb-6">1 Ticket = 2 Lives ($1 value)</p>
+
+              {!selectedPackage ? (
+                <div className="space-y-3">
+                  {packages.map((pkg, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedPackage(idx)}
+                      className="w-full flex justify-between items-center bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 transition-all group"
+                    >
+                      <div className="flex flex-col items-start">
+                        <span className="text-rush-purple font-bold">{pkg.tickets} Ticket{pkg.tickets > 1 ? 's' : ''}</span>
+                        <span className="text-white text-lg font-black">{pkg.lives} Lives</span>
+                      </div>
+                      <div className="bg-gray-900 px-3 py-1 rounded-lg text-neon-green font-mono">
+                        {pkg.price.toFixed(5)} ETH
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="animate-fade-in">
+                  <div className="text-center mb-4">
+                    <p className="text-gray-400">Buying</p>
+                    <p className="text-3xl font-black text-white">{packages[selectedPackage].lives} Lives</p>
+                    <p className="text-neon-green font-mono">{packages[selectedPackage].price.toFixed(5)} ETH</p>
+                  </div>
+                  
+                  {context?.user?.fid && (
+                    <TicketButton 
+                      fid={context.user.fid}
+                      livesToMint={packages[selectedPackage].lives}
+                      ethPrice={packages[selectedPackage].price.toString()}
+                      onSuccess={() => {
+                        setIsStoreOpen(false);
+                        setSelectedPackage(null);
+                      }}
+                    />
+                  )}
+                  
+                  <button 
+                    onClick={() => setSelectedPackage(null)}
+                    className="w-full mt-4 text-sm text-gray-500 hover:text-white underline"
+                  >
+                    Back to Packages
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NAVBAR */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-40 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
@@ -173,237 +254,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-// 'use client';
-
-// import { useEffect, useState } from 'react';
-// import sdk from '@farcaster/frame-sdk';
-// import { doc, getDoc } from 'firebase/firestore';
-// import { db } from '@/lib/firebase';
-// import { getCurrentWeekID } from '@/lib/utils';
-// import Link from 'next/link';
-// import Image from 'next/image'; 
-// import TicketButton from '@/components/TicketButton';
-// import { House, Trophy, User } from 'lucide-react'; 
-// import ThemeToggle from '@/components/ThemeToggle'; 
-
-// // Helper to handle SDK types safely
-// type FrameContext = Awaited<typeof sdk.context>;
-
-// export default function HomePage() {
-//   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
-//   const [context, setContext] = useState<FrameContext>();
-//   const [hasTicket, setHasTicket] = useState(false);
-//   const [loadingTicket, setLoadingTicket] = useState(true);
-
-//   // --- 1. Initialize Farcaster SDK (With Dev Bypass) ---
-//   useEffect(() => {
-//     let isMounted = true;
-
-//     const init = async () => {
-//       // PATH A: Development Mode (Localhost) -> Force Mock Data immediately
-//       if (process.env.NODE_ENV === 'development') {
-//         console.log("🚧 DEV MODE: Skipping Farcaster SDK connection");
-        
-//         await new Promise(resolve => setTimeout(resolve, 500));
-        
-//         if (isMounted) {
-//           setContext({
-//             user: {
-//               fid: 888888,
-//               displayName: "Local Dev",
-//               username: "dev_user",
-//               pfpUrl: "https://placehold.co/100" 
-//             },
-//             client: { clientFid: 1, added: true }
-//           } as unknown as FrameContext);
-          
-//           setIsSDKLoaded(true);
-//           setHasTicket(true); 
-//           setLoadingTicket(false); 
-//         }
-//         return;
-//       }
-
-//       // PATH B: Production Mode
-//       try {
-//         const context = await sdk.context;
-//         if (isMounted) {
-//           setContext(context);
-//           sdk.actions.ready();
-//           setIsSDKLoaded(true);
-//         }
-//       } catch (error) {
-//         console.error("SDK Load Error:", error);
-//       }
-//     };
-
-//     init();
-
-//     return () => { isMounted = false; };
-//   }, []); 
-
-//   // --- 2. Check Firebase for existing ticket ---
-//   const checkTicketStatus = async () => {
-//     if (process.env.NODE_ENV === 'development') return;
-//     if (!context?.user?.fid) return;
-
-//     setLoadingTicket(true);
-//     const weekID = getCurrentWeekID();
-//     const ticketDocID = `${context.user.fid}_${weekID}`;
-
-//     try {
-//       const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
-//       if (ticketSnap.exists() && ticketSnap.data().paid) {
-//         setHasTicket(true);
-//       }
-//     } catch (error) {
-//       console.error("Error checking ticket:", error);
-//     } finally {
-//       setLoadingTicket(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (context?.user?.fid) {
-//       checkTicketStatus();
-//     }
-//   }, [context]);
-
-//   // --- RENDER ---
-//   if (!isSDKLoaded || loadingTicket) {
-//     return (
-//       <div className="flex flex-col items-center justify-center min-h-[50vh] text-green-700 dark:text-neon-green animate-pulse gap-4">
-//         <div className="text-2xl font-bold">LOADING SNAKERUSH...</div>
-//         {process.env.NODE_ENV === 'development' && (
-//            <p className="text-xs text-gray-500">Waiting for Dev Bypass...</p>
-//         )}
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
-      
-//       {/* THEME TOGGLE (Top Right) */}
-//       <div className="absolute top-0 right-0 z-20">
-//         <ThemeToggle />
-//       </div>
-
-//       {/* HEADER LOGO */}
-//       <div className="mt-8 mb-2 flex flex-col items-center">
-//         <div className="relative w-80 h-40">
-//           <Image 
-//             src="/logo.png" 
-//             alt="SnakeRush Logo" 
-//             fill
-//             className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]"
-//             priority
-//           />
-//         </div>
-//         {/* LIGHT MODE: Dark Grey Text | DARK MODE: Light Grey Text */}
-//         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono -mt-2 font-bold">
-//           Weekly Campaign: 
-//           {/* LIGHT MODE: Dark Green Text | DARK MODE: Neon Green Text */}
-//           <span className="ml-2 text-green-800 dark:text-neon-green font-black">
-//             {getCurrentWeekID()}
-//           </span>
-//         </p>
-//       </div>
-
-//       {/* INSTRUCTIONS CARD - FORCED DARK STYLE */}
-//       {/* We use bg-[#1E1E24] explicitly to ignore the light mode variable switch */}
-//       <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-800 w-full max-w-sm shadow-lg text-left">
-        
-//         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-//           How to Play
-//         </h2>
-        
-//         <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside font-medium">
-//           <li>Get the highest score for the day.</li>
-          
-//           {/* EASY MODE: Forced Neon Green Hex */}
-//           <li>
-//             <span className="text-[#39FF14] font-black">Easy Mode:</span> Pass through walls.
-//           </li>
-          
-//           {/* HARD MODE: Forced Danger Red Hex */}
-//           <li>
-//             <span className="text-[#FF4500] font-black">Hard Mode:</span> Walls kill you.
-//           </li>
-//         </ul>
-//       </div>
-
-//       {/* DEV BANNER */}
-//       {process.env.NODE_ENV === 'development' && (
-//         <div className="bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-500 px-4 py-2 rounded-lg text-xs font-mono border border-amber-300 dark:border-yellow-700 font-bold">
-//           🚧 DEV MODE: Ticket Bypassed
-//         </div>
-//       )}
-
-//       {/* ACTION AREA */}
-//       <div className="w-full max-w-sm flex flex-col gap-4">
-//         {hasTicket ? (
-//           <div className="animate-fade-in">
-//             {/* TICKET ACTIVE: Light Green BG/Dark Text (Light) vs Transparent/Neon (Dark) */}
-//             <div className="bg-green-100 dark:bg-green-900/20 border border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green p-3 rounded-lg text-sm mb-4 font-bold flex items-center justify-center gap-2">
-//               ✅ TICKET ACTIVE
-//             </div>
-            
-//             <Link href="/game" className="block w-full">
-//               {/* JOIN BUTTON: Dark Green/White Text (Light) vs Neon Green/Black Text (Dark) */}
-//               <button className="w-full bg-green-700 dark:bg-neon-green hover:bg-green-800 dark:hover:bg-green-400 text-white dark:text-black font-black text-xl py-4 rounded-xl shadow-lg dark:shadow-[0_0_20px_rgba(57,255,20,0.6)] transform hover:scale-105 transition-all">
-//                 JOIN GAME
-//               </button>
-//             </Link>
-//           </div>
-//         ) : (
-//           <div className="animate-fade-in">
-//              {context?.user?.fid && (
-//                <TicketButton 
-//                  fid={context.user.fid} 
-//                  onTicketPurchased={() => checkTicketStatus()} 
-//                />
-//              )}
-//             {!hasTicket && (
-//                <button className="w-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-400 font-bold py-4 rounded-xl mt-4 cursor-not-allowed opacity-50 border border-gray-300 dark:border-transparent">
-//                  JOIN GAME (LOCKED)
-//                </button>
-//             )}
-//           </div>
-//         )}
-//       </div>
-
-//       {/* BOTTOM NAVIGATION BAR */}
-//       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
-//         <div className="max-w-md mx-auto flex justify-around items-center">
-          
-//           {/* HOME (Active) */}
-//           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
-//             <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
-//             <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
-//           </Link>
-
-//           {/* RANK */}
-//           <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
-//             <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
-//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
-//           </Link>
-
-//           {/* PROFILE */}
-//           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
-//             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-//                {context?.user?.pfpUrl ? (
-//                  <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
-//                ) : (
-//                  <User size={16} className="text-gray-500 dark:text-gray-400" />
-//                )}
-//             </div>
-//             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
-//           </Link>
-
-//         </div>
-//       </nav>
-//     </div>
-//   );
-// }

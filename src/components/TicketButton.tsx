@@ -1,110 +1,3 @@
-// 'use client';
-
-// import { useMemo, useState, useEffect } from 'react';
-// import { 
-//   Transaction, 
-//   TransactionButton, 
-//   TransactionStatus, 
-//   TransactionStatusLabel, 
-//   TransactionStatusAction,
-// } from '@coinbase/onchainkit/transaction';
-// import { type Address, type Hex, parseEther } from 'viem';
-// import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-// import { db } from '@/lib/firebase';
-// import { getCurrentWeekID } from '@/lib/utils';
-
-// interface TicketButtonProps {
-//   fid: number;
-//   onTicketPurchased: () => void;
-// }
-
-// export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
-//   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
-//   const [isClient, setIsClient] = useState(false);
-
-//   // Prevent hydration errors by ensuring we only render on client
-//   useEffect(() => {
-//     const timer = setTimeout(() => setIsClient(true), 0);
-//     return () => clearTimeout(timer);
-//   }, []);
-
-//   // Memoize calls to prevent button flickering
-//   const calls = useMemo(() => {
-//     if (!DEV_WALLET) return [];
-//     return [
-//       {
-//         to: DEV_WALLET,
-//         value: parseEther('0.00001'), 
-//         data: '0x' as Hex, 
-//       },
-//     ];
-//   }, [DEV_WALLET]);
-
-//   type OnchainSuccessResponse = {
-//     transactionReceipts?: Array<{ transactionHash?: string }>;
-//     transactionHash?: string;
-//     [key: string]: unknown;
-//   };
-
-//   const handleSuccess = async (response: OnchainSuccessResponse) => {
-//     console.log('Transaction successful:', response);
-    
-//     const txHash = response?.transactionReceipts?.[0]?.transactionHash || 
-//                    response?.transactionHash || 
-//                    'pending';
-
-//     const weekID = getCurrentWeekID();
-//     const ticketDocID = `${fid}_${weekID}`;
-
-//     try {
-//       await setDoc(doc(db, 'tickets', ticketDocID), {
-//         fid: fid,
-//         week: weekID,
-//         paid: true,
-//         txHash: txHash,
-//         timestamp: serverTimestamp(),
-//       });
-//       onTicketPurchased();
-//     } catch (error) {
-//       console.error('Error writing ticket to DB:', error);
-//     }
-//   };
-
-//   const handleError = (err: unknown) => {
-//     console.error("Transaction Error:", err);
-//   };
-
-//   // 0. Loading State
-//   if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
-
-//   // 1. Direct Transaction Button (No "Connect Wallet" step)
-//   // OnchainKit will handle the connection prompt if needed when clicked.
-//   return (
-//     <div className="w-full max-w-xs mx-auto my-4">
-//       <Transaction
-//         chainId={8453} 
-//         calls={calls} 
-//         onError={handleError}
-//         onStatus={(status) => console.log('Tx Status:', status)}
-//         onSuccess={handleSuccess}
-//       >
-//         <TransactionButton 
-//           className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-//           text="MINT TICKET (0.00001 ETH)" 
-//         />
-//         <TransactionStatus>
-//           <TransactionStatusLabel />
-//           <TransactionStatusAction />
-//         </TransactionStatus>
-//       </Transaction>
-      
-//       <p className="text-xs text-gray-500 text-center mt-2">
-//         Valid for Week: {getCurrentWeekID()}
-//       </p>
-//     </div>
-//   );
-// }
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -116,20 +9,25 @@ import {
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
 import { type Address, type Hex, parseEther } from 'viem';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useAccount, useConnect, useDisconnect } from 'wagmi'; 
+import { doc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getCurrentWeekID } from '@/lib/utils';
 
 interface TicketButtonProps {
   fid: number;
-  onTicketPurchased: () => void;
+  livesToMint: number;
+  ethPrice: string;
+  onSuccess: () => void;
 }
 
-export default function TicketButton({ fid, onTicketPurchased }: TicketButtonProps) {
+export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: TicketButtonProps) {
+  const { address, isConnected, status } = useAccount(); 
+  const { connect, connectors } = useConnect(); 
+  const { disconnect } = useDisconnect();
+  
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   const [isClient, setIsClient] = useState(false);
 
-  // Prevent hydration errors
   useEffect(() => {
     const timer = setTimeout(() => setIsClient(true), 0);
     return () => clearTimeout(timer);
@@ -140,11 +38,11 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     return [
       {
         to: DEV_WALLET,
-        value: parseEther('0.0001'), 
+        value: parseEther(ethPrice), 
         data: '0x' as Hex, 
       },
     ];
-  }, [DEV_WALLET]);
+  }, [DEV_WALLET, ethPrice]);
 
   type OnchainSuccessResponse = {
     transactionReceipts?: Array<{ transactionHash?: string }>;
@@ -154,25 +52,31 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
 
   const handleSuccess = async (response: OnchainSuccessResponse) => {
     console.log('Transaction successful:', response);
-    
     const txHash = response?.transactionReceipts?.[0]?.transactionHash || 
-                   response?.transactionHash || 
-                   'pending';
+                   response?.transactionHash || 'pending';
 
-    const weekID = getCurrentWeekID();
-    const ticketDocID = `${fid}_${weekID}`;
+    const userRef = doc(db, 'users', fid.toString());
+    const purchaseRef = doc(db, 'purchases', `${fid}_${Date.now()}`);
 
     try {
-      await setDoc(doc(db, 'tickets', ticketDocID), {
-        fid: fid,
-        week: weekID,
-        paid: true,
-        txHash: txHash,
+      // 1. Record the Purchase
+      await setDoc(purchaseRef, {
+        fid,
+        lives: livesToMint,
+        price: ethPrice,
+        txHash,
         timestamp: serverTimestamp(),
       });
-      onTicketPurchased();
+
+      // 2. Increment Lives in User Profile
+      await setDoc(userRef, {
+        lives: increment(livesToMint),
+        lastPurchase: serverTimestamp()
+      }, { merge: true });
+
+      onSuccess();
     } catch (error) {
-      console.error('Error writing ticket to DB:', error);
+      console.error('Error crediting lives:', error);
     }
   };
 
@@ -180,13 +84,37 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
     console.error("Transaction Error:", err);
   };
 
-  // 0. Loading State
+  const handleConnect = () => {
+    const coinbase = connectors.find(c => c.id === 'coinbaseWalletSDK');
+    const injected = connectors.find(c => c.id === 'injected');
+    if (coinbase) connect({ connector: coinbase });
+    else if (injected) connect({ connector: injected });
+    else if (connectors.length > 0) connect({ connector: connectors[0] });
+  };
+
   if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
 
-  // 1. Direct Transaction Button
-  // We removed the connection check. Clicking this will trigger the wallet.
+  if (status === 'reconnecting' || status === 'connecting') {
+    return (
+      <div className="w-full text-center py-2 animate-pulse text-neon-green font-bold text-sm">
+        Syncing...
+      </div>
+    );
+  }
+
+  if (!isConnected || !address) {
+    return (
+      <button
+        onClick={handleConnect}
+        className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all"
+      >
+        Connect Wallet to Buy
+      </button>
+    );
+  }
+
   return (
-    <div className="w-full max-w-xs mx-auto my-4">
+    <div className="w-full flex flex-col gap-2">
       <Transaction
         chainId={8453} 
         calls={calls} 
@@ -195,8 +123,8 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
         onSuccess={handleSuccess}
       >
         <TransactionButton 
-          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          text="MINT TICKET (0.0001 ETH)" 
+          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all disabled:opacity-50"
+          text={`BUY ${livesToMint} LIVES (${ethPrice} ETH)`} 
         />
         <TransactionStatus>
           <TransactionStatusLabel />
@@ -204,9 +132,9 @@ export default function TicketButton({ fid, onTicketPurchased }: TicketButtonPro
         </TransactionStatus>
       </Transaction>
       
-      <p className="text-xs text-gray-500 text-center mt-2">
-        Valid for Week: {getCurrentWeekID()}
-      </p>
+      <button onClick={() => disconnect()} className="text-[10px] text-gray-500 hover:text-red-400">
+        Reset Connection
+      </button>
     </div>
   );
 }

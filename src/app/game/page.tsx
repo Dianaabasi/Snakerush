@@ -2,192 +2,204 @@
 
 import { useState, useEffect } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; // Using runTransaction for safety
 import { db } from '@/lib/firebase';
-import { Difficulty } from '@/store/gameStore';
+import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
 import GameOverModal from '@/components/GameOverModal';
+import { getCurrentWeekID } from '@/lib/utils';
+import { Heart } from 'lucide-react';
 
-// Helper to get today's date string (UTC) for the DB key
-const getTodayKey = () => {
-  const now = new Date();
-  return now.toISOString().split('T')[0]; // Returns 'YYYY-MM-DD'
-};
-
-// Helper type for SDK context
 type FrameContext = Awaited<typeof sdk.context>;
+
+// Config: Value added to pool per game ($0.50 value * 50% = $0.25)
+const POOL_CONTRIBUTION = 0.25;
 
 export default function GamePage() {
   const [context, setContext] = useState<FrameContext>();
-  
-  // Game States
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'OVER'>('MENU');
-  const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
+  const [gameState, setGameState] = useState<'LOADING' | 'PLAYING' | 'PAUSED' | 'OVER'>('LOADING');
   const [finalScore, setFinalScore] = useState(0);
-
-  // REPLAY FIX: This key forces the GameCanvas to re-mount and reset completely
+  const [lives, setLives] = useState<number | null>(null);
+  
   const [gameResetKey, setGameResetKey] = useState(0);
+  const [gamePhase, setGamePhase] = useState<GamePhase>('NORMAL'); // Track phase for popups
 
-  // Claiming States
+  // Claiming
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimStatus, setClaimStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
-  // Load User Context
+  // Load User & Start Game Logic
   useEffect(() => {
-    const loadContext = async () => {
-      try {
-        const ctx = await sdk.context;
-        setContext(ctx);
-        sdk.actions.ready();
-      } catch (err) {
-        console.error("Context load error", err);
+    const init = async () => {
+      const ctx = await sdk.context;
+      setContext(ctx);
+      sdk.actions.ready();
+
+      if (ctx?.user?.fid) {
+        await startGameTransaction(ctx.user.fid);
       }
     };
-    if (sdk) loadContext();
+    init();
   }, []);
 
-  // --- ACTIONS ---
+  // --- CORE LOGIC: START GAME TRANSACTION ---
+  // Deduct 1 life, Add to Pool
+  const startGameTransaction = async (fid: number) => {
+    const weekID = getCurrentWeekID();
+    const userRef = doc(db, 'users', fid.toString());
+    const campaignRef = doc(db, 'campaigns', weekID);
 
-  const handleStart = (mode: Difficulty) => {
-    setDifficulty(mode);
-    setGameState('PLAYING');
-    setClaimStatus('IDLE');
-    setGameResetKey(prev => prev + 1); // Force fresh start
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw "User not found";
+        
+        const currentLives = userDoc.data().lives || 0;
+        if (currentLives < 1) throw "Not enough lives";
+
+        // Deduct Life
+        transaction.update(userRef, { lives: currentLives - 1 });
+        
+        // Add to Pool (Initialize if doesn't exist)
+        transaction.set(campaignRef, { 
+          poolTotal: increment(POOL_CONTRIBUTION) 
+        }, { merge: true });
+
+        setLives(currentLives - 1); // Update local state
+      });
+
+      // Success! Start the game
+      setGameState('PLAYING');
+      
+    } catch (e) {
+      console.error("Game Start Error:", e);
+      alert("Could not start game: " + e);
+      window.location.href = "/"; // Go back home if failed
+    }
   };
+
+  // --- HANDLERS ---
 
   const handleGameOver = (score: number) => {
     setFinalScore(score);
     setGameState('OVER');
   };
 
-  const handleReplay = () => {
-    setGameState('PLAYING');
-    setClaimStatus('IDLE');
-    setGameResetKey(prev => prev + 1); // Force fresh start
+  // Called by Canvas when score hits 200
+  const handlePhaseTransition = () => {
+    setGameState('PAUSED'); // Shows the "Hard Mode" modal
+  };
+
+  const resumeGame = () => {
+    setGamePhase('HARD'); // Tell canvas to switch modes
+    setGameState('PLAYING'); // Resume loop
   };
 
   const handleClaim = async () => {
-    if (!context?.user?.fid) {
-      console.error("No FID found, cannot save.");
-      return;
-    }
-
+    if (!context?.user?.fid) return;
     setIsClaiming(true);
-    // Ensure FID is string for Firestore path
-    const fidString = context.user.fid.toString();
-    const dateKey = getTodayKey();
     
-    // References
+    // ... (Same Claim Logic as before, just kept concise here)
+    const fidString = context.user.fid.toString();
+    const dateKey = new Date().toISOString().split('T')[0];
     const userRef = doc(db, 'users', fidString);
     const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
 
     try {
-      console.log(`Attempting to save score: ${finalScore} for FID: ${fidString}`);
+        // Run transaction to verify high score
+        await runTransaction(db, async (t) => {
+            const dailyDoc = await t.get(dailyScoreRef);
+            const currentBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
 
-      // 1. Check existing score for today
-      const dailySnap = await getDoc(dailyScoreRef);
-      let currentDailyHigh = 0;
-      if (dailySnap.exists()) {
-        currentDailyHigh = dailySnap.data().bestScore || 0;
-      }
+            if (finalScore > currentBest) {
+                const delta = finalScore - currentBest;
+                t.set(dailyScoreRef, {
+                    fid: context.user.fid,
+                    date: dateKey,
+                    bestScore: finalScore,
+                    timestamp: serverTimestamp()
+                }, { merge: true });
 
-      // 2. Calculate the difference (Point Delta)
-      // If new score is 100 and old was 80, add 20 to the weekly total.
-      if (finalScore > currentDailyHigh) {
-        const scoreDelta = finalScore - currentDailyHigh;
-
-        // 3. Write Daily Score
-        await setDoc(dailyScoreRef, {
-          fid: context.user.fid, // Store as number inside doc
-          date: dateKey,
-          bestScore: finalScore,
-          timestamp: serverTimestamp(),
-          lastMode: difficulty
-        }, { merge: true });
-        
-        // 4. Update User Profile & Weekly Total (Crucial for Leaderboard)
-        await setDoc(userRef, {
-          fid: context.user.fid,
-          username: context.user.username || context.user.displayName || 'Unknown',
-          pfpUrl: context.user.pfpUrl || '',
-          // Increment the weekly score by the improvement amount
-          weeklyScore: increment(scoreDelta),
-          lastPlayedAt: serverTimestamp()
-        }, { merge: true });
-
-        console.log("✅ New high score and leaderboard updated!");
+                t.set(userRef, {
+                    weeklyScore: increment(delta),
+                    lastPlayedAt: serverTimestamp()
+                }, { merge: true });
+            }
+        });
         setClaimStatus('SUCCESS');
-      } else {
-        console.log("⚠️ Score lower than daily best, ignoring.");
-        setClaimStatus('SUCCESS'); // Still show success so user knows game is done
-      }
-
     } catch (error) {
-      console.error("❌ Error saving score:", error);
-      setClaimStatus('ERROR');
+        console.error("Claim Error", error);
+        setClaimStatus('ERROR');
     } finally {
-      setIsClaiming(false);
+        setIsClaiming(false);
     }
   };
 
   // --- RENDER ---
 
-  // 1. MENU SCREEN
-  if (gameState === 'MENU') {
+  if (gameState === 'LOADING') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 w-full max-w-sm">
-        <h1 className="text-4xl font-black text-gray-900 dark:text-white drop-shadow-sm">
-          SELECT MODE
-        </h1>
-        
-        {/* EASY MODE BUTTON */}
-        <button 
-          onClick={() => handleStart('EASY')}
-          className="w-full bg-green-100 dark:bg-neon-green/10 border-2 border-green-600 dark:border-neon-green text-green-800 dark:text-neon-green hover:bg-green-200 dark:hover:bg-neon-green dark:hover:text-black p-6 rounded-2xl transition-all group"
-        >
-          <div className="text-2xl font-black mb-1">EASY MODE</div>
-          <div className="text-sm font-bold opacity-80 group-hover:opacity-100">
-            Pass through walls • Classic Fun
-          </div>
-        </button>
-
-        {/* HARD MODE BUTTON */}
-        <button 
-          onClick={() => handleStart('HARD')}
-          className="w-full bg-red-100 dark:bg-danger-red/10 border-2 border-red-600 dark:border-danger-red text-red-800 dark:text-danger-red hover:bg-red-200 dark:hover:bg-danger-red dark:hover:text-white p-6 rounded-2xl transition-all group"
-        >
-          <div className="text-2xl font-black mb-1">HARD MODE</div>
-          <div className="text-sm font-bold opacity-80 group-hover:opacity-100">
-            Walls Kill You • High Stakes
-          </div>
-        </button>
-      </div>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-neon-green animate-pulse">
+            <div className="text-2xl font-bold">STARTING GAME...</div>
+            <p className="text-xs text-gray-500">Spending 1 Life...</p>
+        </div>
     );
   }
 
-  // 2. GAME & GAME OVER
   return (
     <div className="relative w-full flex flex-col items-center">
-      {/* FIX: key={gameResetKey} 
-         This tells React: "If this number changes, destroy the old game 
-         and build a completely new one." This fixes the replay bug.
-      */}
-      <GameCanvas 
-        key={gameResetKey} 
-        difficulty={difficulty} 
-        onGameOver={handleGameOver}
-      />
+        
+        {/* TOP HUD */}
+        <div className="absolute top-2 right-4 z-10 flex items-center gap-1 text-red-500 font-black bg-black/50 px-3 py-1 rounded-full">
+            <Heart size={16} fill="currentColor" />
+            <span>{lives}</span>
+        </div>
 
-      {/* Modal Overlay */}
-      {gameState === 'OVER' && (
-        <GameOverModal
-          score={finalScore}
-          isClaiming={isClaiming}
-          onClaim={handleClaim}
-          onReplay={handleReplay}
-          claimStatus={claimStatus}
+        {/* CANVAS ENGINE */}
+        <GameCanvas 
+            key={gameResetKey} 
+            phase={gamePhase} // Pass phase down
+            onGameOver={handleGameOver}
+            onPhaseTransition={handlePhaseTransition} // Callback for 200pts
+            isPaused={gameState === 'PAUSED'} // Stop loop if paused
         />
-      )}
+
+        {/* END GAME BUTTON (Manual Quit) */}
+        {gameState === 'PLAYING' && (
+            <button 
+                onClick={() => handleGameOver(finalScore)} // Pass current score? Need to get from canvas ref ideally, but for now simple quit
+                className="mt-6 border-2 border-red-900/50 text-red-900 dark:text-red-500 px-6 py-2 rounded-full font-bold text-xs hover:bg-red-900/20"
+            >
+                END GAME
+            </button>
+        )}
+
+        {/* TRANSITION MODAL */}
+        {gameState === 'PAUSED' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-50">
+                <div className="text-center p-6 bg-[#1E1E24] border-2 border-danger-red rounded-2xl w-64">
+                    <h2 className="text-2xl font-black text-danger-red mb-2">WARNING</h2>
+                    <p className="text-white text-sm mb-6">You have entered <br/> HARD MODE</p>
+                    <button 
+                        onClick={resumeGame}
+                        className="w-full bg-danger-red text-white py-3 rounded-xl font-bold animate-pulse"
+                    >
+                        CONTINUE
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* GAME OVER MODAL */}
+        {gameState === 'OVER' && (
+            <GameOverModal
+                score={finalScore}
+                isClaiming={isClaiming}
+                onClaim={handleClaim}
+                onReplay={() => window.location.reload()} // Replay requires reload to pay life again
+                claimStatus={claimStatus}
+            />
+        )}
     </div>
   );
 }

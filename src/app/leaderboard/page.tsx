@@ -2,48 +2,40 @@
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs, orderBy, query, limit, doc, getDoc } from 'firebase/firestore';
-import { getCurrentWeekID } from '@/lib/utils';
 import { db } from '@/lib/firebase';
+import { getCurrentWeekID } from '@/lib/utils';
 import sdk from '@farcaster/frame-sdk';
 import LeaderboardTable, { type LeaderboardEntry } from '@/components/LeaderboardTable';
 import Link from 'next/link';
-import Image from 'next/image';
-import { House, Trophy, User } from 'lucide-react';
+import Image from 'next/image'; 
+import { House, Trophy, User } from 'lucide-react'; 
 
-// Helper Type
 type FrameContext = Awaited<typeof sdk.context>;
+
+// Reward Percentages
+const REWARDS = [0.35, 0.25, 0.20, 0.12, 0.08];
 
 export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [context, setContext] = useState<FrameContext>();
-  const [hasTicket, setHasTicket] = useState(false); 
+  const [rewardPool, setRewardPool] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
-      // 1. Get Current User
       try {
         const ctx = await sdk.context;
-        setContext(ctx);
+        setContext(ctx); 
         sdk.actions.ready();
-        
-        // CHECK TICKET STATUS
-        if (ctx?.user?.fid) {
-          const fidString = ctx.user.fid.toString();
-          const weekID = getCurrentWeekID();
-          const ticketDocID = `${fidString}_${weekID}`;
-          
-          const ticketSnap = await getDoc(doc(db, 'tickets', ticketDocID));
-          if (ticketSnap.exists() && ticketSnap.data().paid) {
-            setHasTicket(true);
-          }
-        }
-      } catch (err) {
-        console.error("SDK Context Error:", err);
-      }
 
-      try {
-        // 2. Query Firestore
+        // 1. Get Reward Pool
+        const weekID = getCurrentWeekID();
+        const campaignSnap = await getDoc(doc(db, 'campaigns', weekID));
+        if (campaignSnap.exists()) {
+            setRewardPool(campaignSnap.data().poolTotal || 0);
+        }
+
+        // 2. Query Firestore for Leaderboard
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy('weeklyScore', 'desc'), limit(20));
         
@@ -53,7 +45,6 @@ export default function LeaderboardPage() {
 
         querySnapshot.forEach((doc) => {
           const userData = doc.data();
-          // Only list users with a score > 0
           if (userData.weeklyScore > 0) {
             data.push({
               fid: userData.fid,
@@ -77,58 +68,46 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
-    <div className="w-full flex flex-col items-center gap-6 text-center pb-10">
+    <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
       
-      {/* HEADER: Logo Top Left */}
-      <div className="w-full h-23 flex justify-start px-4 pt-6">
-        <Link href="/">
-          <div className="relative hover:scale-105 transition-transform cursor-pointer">
-            <Image 
-              src="/logo.png" 
-              alt="SnakeRush Logo" 
-              width={200}
-              height={80}
-              className="object-contain drop-shadow-[0_0_5px_rgba(138,43,226,0.6)]"
-              priority 
-            />
-          </div>
-        </Link>
+      {/* HEADER */}
+      <div className="w-full flex justify-start px-4 pt-6">
+        <Link href="/"><div className="relative w-32 h-10"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div></Link>
       </div>
 
       <div className="mt-0">
         <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FFD700] to-orange-500 drop-shadow-[0_2px_4px_rgba(255,215,0,0.3)]">
           WEEKLY RANKINGS
         </h1>
-        <p className="text-gray-400 text-xs mt-1">Top players this week reset Sunday</p>
+        <div className="bg-gray-900 text-yellow-400 px-4 py-1 rounded-full text-sm font-bold inline-block mt-2 border border-yellow-600">
+            🏆 POOL: ${rewardPool.toFixed(2)}
+        </div>
       </div>
 
       {loading ? (
-        <div className="min-h-[30vh] flex items-center text-neon-green animate-pulse font-bold">
+        <div className="min-h-[30vh] flex items-center text-green-700 dark:text-neon-green animate-pulse font-bold">
           LOADING SCORES...
         </div>
       ) : (
-        <LeaderboardTable entries={entries} currentUserFid={context?.user?.fid} />
+        <div className="w-full max-w-sm">
+            {/* INJECT EARNINGS INTO TABLE DISPLAY if you modify table, or just show list here */}
+            {/* For now, reusing existing table but users can infer earnings */}
+            <LeaderboardTable entries={entries} currentUserFid={context?.user?.fid} />
+            
+            {/* EARNINGS BREAKDOWN */}
+            <div className="mt-6 bg-[#1E1E24] p-4 rounded-xl text-left border border-gray-800">
+                <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Estimated Earnings</h3>
+                {entries.slice(0, 5).map((entry, idx) => (
+                    <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-800 last:border-0">
+                        <span className="text-white">#{idx+1} {entry.username}</span>
+                        <span className="text-neon-green font-mono">${(rewardPool * REWARDS[idx]).toFixed(2)}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
       )}
 
-      <div className="flex gap-4 text-sm font-medium text-rush-purple">
-        <Link href="/" className="hover:text-white transition-colors">
-          ← Back to Home
-        </Link>
-        {/* CONDITIONAL PLAY BUTTON */}
-        {hasTicket ? (
-          <Link href="/game" className="hover:text-white transition-colors font-bold">
-            Play Now
-          </Link>
-        ) : (
-          <button 
-            onClick={() => alert("🎟️ You must mint a ticket on the Home page first!")}
-            className="hover:text-red-400 transition-colors cursor-pointer text-gray-500"
-          >
-            Play Now
-          </button>
-        )}
-      </div>
-
+      {/* NAVBAR */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
           <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px] group">
