@@ -40,7 +40,6 @@ export default function GamePage() {
     init();
   }, []);
 
-  // 1. Check Lives before starting
   const checkLivesAndStart = async (fid: number) => {
     const userRef = doc(db, 'users', fid.toString());
     try {
@@ -58,7 +57,6 @@ export default function GamePage() {
     }
   };
 
-  // 2. Transaction: Deduct Life, Add to Pool
   const startGameTransaction = async (fid: number) => {
     const weekID = getCurrentWeekID();
     const userRef = doc(db, 'users', fid.toString());
@@ -144,7 +142,6 @@ export default function GamePage() {
     );
   }
 
-  // --- NO LIVES SCREEN ---
   if (gameState === 'NO_LIVES') {
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">
@@ -167,7 +164,7 @@ export default function GamePage() {
   return (
     <div className="relative w-full flex flex-col items-center">
         
-        {/* CENTERED LIFE BAR (Non-Overlapping) */}
+        {/* CENTERED LIFE BAR */}
         <div className="mb-2 flex items-center gap-2 text-danger-red font-black bg-gray-900/50 px-4 py-1 rounded-full border border-gray-800">
             <Heart size={20} fill="currentColor" />
             <span className="text-lg">{lives} Lives</span>
