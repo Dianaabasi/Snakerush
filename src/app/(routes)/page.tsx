@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; 
+// ADDED: setDoc to save user profile
+import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
@@ -28,7 +29,6 @@ export default function HomePage() {
   const [rewardPool, setRewardPool] = useState(0);
   
   const [isStoreOpen, setIsStoreOpen] = useState(false);
-  // selectedPackage is the index of the packages array
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
   useEffect(() => {
@@ -43,7 +43,17 @@ export default function HomePage() {
         setIsSDKLoaded(true);
 
         if (ctx?.user?.fid) {
-          unsubscribeUser = onSnapshot(doc(db, 'users', ctx.user.fid.toString()), (doc) => {
+          // -- SYNC USER PROFILE TO FIREBASE ---
+          // This ensures the username/pfp exists in the DB for the leaderboard to display
+          const userRef = doc(db, 'users', ctx.user.fid.toString());
+          await setDoc(userRef, {
+            fid: ctx.user.fid,
+            username: ctx.user.username || `fid:${ctx.user.fid}`,
+            displayName: ctx.user.displayName || '',
+            pfpUrl: ctx.user.pfpUrl || '',
+          }, { merge: true });
+
+          unsubscribeUser = onSnapshot(userRef, (doc) => {
             setLives(doc.exists() ? (doc.data().lives || 0) : 0);
           });
 
@@ -65,9 +75,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // SEPARATION OF CONCERNS:
-  // 'lives': The internal value passed to the logic (1, 2, 3...) to prevent double crediting.
-  // 'displayLives': The value shown to the user (2, 4, 6...) representing the actual result.
+  // Explicit package definitions: 1 Ticket = 2 Lives
   const packages = [
     { tickets: 1, lives: 1, displayLives: 2, price: UNIT_PRICE_ETH1 },
     { tickets: 2, lives: 2, displayLives: 4, price: UNIT_PRICE_ETH2 },
@@ -77,12 +85,11 @@ export default function HomePage() {
   ];
 
   // STRICT RULE: Total lives (current + purchase) cannot exceed 10.
-  // We check against 'displayLives' because that is what the user actually gets.
   const canBuyPackage = (packageDisplayLives: number) => {
     return (lives + packageDisplayLives) <= 10;
   };
 
-  // Store disabled if lives are 9 or 10 (since minimum purchase gives 2 lives)
+  // Is store button disabled? (Only if lives is exactly 10 or 9, since min purchase is 2)
   const isStoreDisabled = lives >= 9;
 
   if (!isSDKLoaded) {
@@ -175,7 +182,6 @@ export default function HomePage() {
               {selectedPackage === null ? (
                 <div className="space-y-3">
                   {packages.map((pkg, idx) => {
-                    // Check against displayLives to prevent overfill
                     const isBuyable = canBuyPackage(pkg.displayLives);
                     return (
                       <button
@@ -189,7 +195,6 @@ export default function HomePage() {
                       >
                         <div className="flex flex-col items-start">
                           <span className="text-rush-purple font-bold">{pkg.tickets} Ticket{pkg.tickets > 1 ? 's' : ''}</span>
-                          {/* SHOW DISPLAY LIVES (2, 4, 6...) */}
                           <span className="text-white text-lg font-black">{pkg.displayLives} Lives</span>
                         </div>
                         <div className="flex flex-col items-end">
@@ -207,7 +212,6 @@ export default function HomePage() {
                 <div className="animate-fade-in">
                   <div className="text-center mb-4">
                     <p className="text-gray-400">Buying</p>
-                    {/* SHOW DISPLAY LIVES HERE TOO */}
                     <p className="text-3xl font-black text-white">{packages[selectedPackage].displayLives} Lives</p>
                     <p className="text-neon-green font-mono">{packages[selectedPackage].price.toFixed(5)} ETH</p>
                   </div>
@@ -215,7 +219,6 @@ export default function HomePage() {
                   {context?.user?.fid && (
                     <TicketButton 
                       fid={context.user.fid}
-                      // PASS THE LOGIC LIVES (1, 2, 3...) TO BUTTON
                       livesToMint={packages[selectedPackage].lives}
                       ethPrice={packages[selectedPackage].price.toString()}
                       onSuccess={() => {
