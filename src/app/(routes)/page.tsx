@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, onSnapshot } from 'firebase/firestore'; 
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
@@ -65,19 +65,23 @@ export default function HomePage() {
     };
   }, []);
 
-  // Explicit package definitions matching the requirements
+  // Explicit package definitions: 1 Ticket = 2 Lives
   const packages = [
-    { tickets: 1, lives: 1, price: UNIT_PRICE_ETH1 },
-    { tickets: 2, lives: 2, price: UNIT_PRICE_ETH2 },
-    { tickets: 3, lives: 3, price: UNIT_PRICE_ETH3 },
-    { tickets: 4, lives: 4, price: UNIT_PRICE_ETH4 },
-    { tickets: 5, lives: 5, price: UNIT_PRICE_ETH5 },
+    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH1 },
+    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH2 },
+    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH3 },
+    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH4 },
+    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH5 },
   ];
 
-  // Logic: User cannot have more than 10 lives total
+  // STRICT RULE: Total lives (current + purchase) cannot exceed 10.
   const canBuyPackage = (packageLives: number) => {
     return (lives + packageLives) <= 10;
   };
+
+  // Is store button disabled? (Only if lives is exactly 10 or 9, since min purchase is 2)
+  // Actually, if lives is 9, they can't buy 2 lives (total 11), so disable store at >= 9.
+  const isStoreDisabled = lives >= 9;
 
   if (!isSDKLoaded) {
     return (
@@ -127,9 +131,9 @@ export default function HomePage() {
           
           <button 
             onClick={() => setIsStoreOpen(true)}
-            disabled={lives >= 10} // Strictly disable if already at max
+            disabled={isStoreDisabled}
             className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2
-              ${lives >= 10 
+              ${isStoreDisabled 
                 ? 'bg-gray-400 cursor-not-allowed opacity-50' 
                 : 'bg-rush-purple hover:bg-purple-600 text-white shadow-lg'}`}
           >
