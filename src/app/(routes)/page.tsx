@@ -24,6 +24,7 @@ export default function HomePage() {
   const [rewardPool, setRewardPool] = useState(0);
   
   const [isStoreOpen, setIsStoreOpen] = useState(false);
+  // FIX: selectedPackage is an index, so 0 is a valid number. We must check against null explicitly.
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
   useEffect(() => {
@@ -69,6 +70,7 @@ export default function HomePage() {
   ];
 
   // Helper to check if package is valid based on current lives
+  // Rule: A user's total available lives cannot pass 10
   const canBuyPackage = (packageLives: number) => {
     return (lives + packageLives) <= 10;
   };
@@ -121,6 +123,7 @@ export default function HomePage() {
           
           <button 
             onClick={() => setIsStoreOpen(true)}
+            // Disable only if they have absolutely no room for even the smallest package (2 lives)
             disabled={lives > 8}
             className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2
               ${lives > 8 
@@ -159,7 +162,8 @@ export default function HomePage() {
               <h2 className="text-2xl font-black text-white mb-1">TICKET STORE</h2>
               <p className="text-xs text-gray-400 mb-6">1 Ticket = 2 Lives ($1 value)</p>
 
-              {!selectedPackage ? (
+              {/* FIX: Check explicitly for null, because index 0 (first package) is falsy in JS */}
+              {selectedPackage === null ? (
                 <div className="space-y-3">
                   {packages.map((pkg, idx) => {
                     const isBuyable = canBuyPackage(pkg.lives);
