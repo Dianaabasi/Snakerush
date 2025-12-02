@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; 
+import { doc, onSnapshot } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
@@ -13,8 +13,12 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// CONFIG: Price per 2 lives (1 ticket)
-const UNIT_PRICE_ETH = 0.00001; 
+// CONFIG: Precise Unit Prices as requested
+const UNIT_PRICE_ETH1 = 0.00001; 
+const UNIT_PRICE_ETH2 = 0.00002; 
+const UNIT_PRICE_ETH3 = 0.00003; 
+const UNIT_PRICE_ETH4 = 0.00004; 
+const UNIT_PRICE_ETH5 = 0.00005; 
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
@@ -24,7 +28,7 @@ export default function HomePage() {
   const [rewardPool, setRewardPool] = useState(0);
   
   const [isStoreOpen, setIsStoreOpen] = useState(false);
-  // FIX: selectedPackage is an index, so 0 is a valid number. We must check against null explicitly.
+  // selectedPackage is the index of the packages array
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
   useEffect(() => {
@@ -61,16 +65,16 @@ export default function HomePage() {
     };
   }, []);
 
+  // Explicit package definitions matching the requirements
   const packages = [
-    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH * 1 },
-    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH * 2 },
-    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH * 3 },
-    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH * 4 },
-    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH * 5 },
+    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH1 },
+    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH2 },
+    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH3 },
+    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH4 },
+    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH5 },
   ];
 
-  // Helper to check if package is valid based on current lives
-  // Rule: A user's total available lives cannot pass 10
+  // Logic: User cannot have more than 10 lives total
   const canBuyPackage = (packageLives: number) => {
     return (lives + packageLives) <= 10;
   };
@@ -123,15 +127,14 @@ export default function HomePage() {
           
           <button 
             onClick={() => setIsStoreOpen(true)}
-            // Disable only if they have absolutely no room for even the smallest package (2 lives)
-            disabled={lives > 8}
+            disabled={lives >= 10} // Strictly disable if already at max
             className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2
-              ${lives > 8 
+              ${lives >= 10 
                 ? 'bg-gray-400 cursor-not-allowed opacity-50' 
                 : 'bg-rush-purple hover:bg-purple-600 text-white shadow-lg'}`}
           >
             <ShoppingCart size={16} />
-            {lives > 8 ? 'MAX LIVES' : 'BUY LIVES'}
+            {lives >= 10 ? 'MAX LIVES' : 'BUY LIVES'}
           </button>
         </div>
 
@@ -160,9 +163,9 @@ export default function HomePage() {
             
             <div className="p-6">
               <h2 className="text-2xl font-black text-white mb-1">TICKET STORE</h2>
-              <p className="text-xs text-gray-400 mb-6">1 Ticket = 2 Lives ($1 value)</p>
+              <p className="text-xs text-gray-400 mb-6">1 Ticket = 2 Lives</p>
 
-              {/* FIX: Check explicitly for null, because index 0 (first package) is falsy in JS */}
+              {/* Render Package List if no package is selected */}
               {selectedPackage === null ? (
                 <div className="space-y-3">
                   {packages.map((pkg, idx) => {
@@ -183,7 +186,7 @@ export default function HomePage() {
                         </div>
                         <div className="flex flex-col items-end">
                            <span className="bg-gray-900 px-3 py-1 rounded-lg text-neon-green font-mono mb-1">
-                             {pkg.price.toFixed(5)}
+                             {pkg.price.toFixed(5)} ETH
                            </span>
                            {!isBuyable && <span className="text-[10px] text-red-500 font-bold">Max Limit</span>}
                         </div>
@@ -192,6 +195,7 @@ export default function HomePage() {
                   })}
                 </div>
               ) : (
+                /* Render Transaction View if a package is selected */
                 <div className="animate-fade-in">
                   <div className="text-center mb-4">
                     <p className="text-gray-400">Buying</p>
