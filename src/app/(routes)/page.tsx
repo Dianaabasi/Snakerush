@@ -65,22 +65,24 @@ export default function HomePage() {
     };
   }, []);
 
-  // Explicit package definitions: 1 Ticket = 2 Lives
+  // SEPARATION OF CONCERNS:
+  // 'lives': The internal value passed to the logic (1, 2, 3...) to prevent double crediting.
+  // 'displayLives': The value shown to the user (2, 4, 6...) representing the actual result.
   const packages = [
-    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH1 },
-    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH2 },
-    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH3 },
-    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH4 },
-    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH5 },
+    { tickets: 1, lives: 1, displayLives: 2, price: UNIT_PRICE_ETH1 },
+    { tickets: 2, lives: 2, displayLives: 4, price: UNIT_PRICE_ETH2 },
+    { tickets: 3, lives: 3, displayLives: 6, price: UNIT_PRICE_ETH3 },
+    { tickets: 4, lives: 4, displayLives: 8, price: UNIT_PRICE_ETH4 },
+    { tickets: 5, lives: 5, displayLives: 10, price: UNIT_PRICE_ETH5 },
   ];
 
   // STRICT RULE: Total lives (current + purchase) cannot exceed 10.
-  const canBuyPackage = (packageLives: number) => {
-    return (lives + packageLives) <= 10;
+  // We check against 'displayLives' because that is what the user actually gets.
+  const canBuyPackage = (packageDisplayLives: number) => {
+    return (lives + packageDisplayLives) <= 10;
   };
 
-  // Is store button disabled? (Only if lives is exactly 10 or 9, since min purchase is 2)
-  // Actually, if lives is 9, they can't buy 2 lives (total 11), so disable store at >= 9.
+  // Store disabled if lives are 9 or 10 (since minimum purchase gives 2 lives)
   const isStoreDisabled = lives >= 9;
 
   if (!isSDKLoaded) {
@@ -173,7 +175,8 @@ export default function HomePage() {
               {selectedPackage === null ? (
                 <div className="space-y-3">
                   {packages.map((pkg, idx) => {
-                    const isBuyable = canBuyPackage(pkg.lives);
+                    // Check against displayLives to prevent overfill
+                    const isBuyable = canBuyPackage(pkg.displayLives);
                     return (
                       <button
                         key={idx}
@@ -186,7 +189,8 @@ export default function HomePage() {
                       >
                         <div className="flex flex-col items-start">
                           <span className="text-rush-purple font-bold">{pkg.tickets} Ticket{pkg.tickets > 1 ? 's' : ''}</span>
-                          <span className="text-white text-lg font-black">{pkg.lives} Lives</span>
+                          {/* SHOW DISPLAY LIVES (2, 4, 6...) */}
+                          <span className="text-white text-lg font-black">{pkg.displayLives} Lives</span>
                         </div>
                         <div className="flex flex-col items-end">
                            <span className="bg-gray-900 px-3 py-1 rounded-lg text-neon-green font-mono mb-1">
@@ -203,13 +207,15 @@ export default function HomePage() {
                 <div className="animate-fade-in">
                   <div className="text-center mb-4">
                     <p className="text-gray-400">Buying</p>
-                    <p className="text-3xl font-black text-white">{packages[selectedPackage].lives} Lives</p>
+                    {/* SHOW DISPLAY LIVES HERE TOO */}
+                    <p className="text-3xl font-black text-white">{packages[selectedPackage].displayLives} Lives</p>
                     <p className="text-neon-green font-mono">{packages[selectedPackage].price.toFixed(5)} ETH</p>
                   </div>
                   
                   {context?.user?.fid && (
                     <TicketButton 
                       fid={context.user.fid}
+                      // PASS THE LOGIC LIVES (1, 2, 3...) TO BUTTON
                       livesToMint={packages[selectedPackage].lives}
                       ethPrice={packages[selectedPackage].price.toString()}
                       onSuccess={() => {
