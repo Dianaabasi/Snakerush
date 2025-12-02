@@ -67,11 +67,11 @@ export default function HomePage() {
 
   // Explicit package definitions matching the requirements
   const packages = [
-    { tickets: 1, lives: 2, price: UNIT_PRICE_ETH1 },
-    { tickets: 2, lives: 4, price: UNIT_PRICE_ETH2 },
-    { tickets: 3, lives: 6, price: UNIT_PRICE_ETH3 },
-    { tickets: 4, lives: 8, price: UNIT_PRICE_ETH4 },
-    { tickets: 5, lives: 10, price: UNIT_PRICE_ETH5 },
+    { tickets: 1, lives: 1, price: UNIT_PRICE_ETH1 },
+    { tickets: 2, lives: 2, price: UNIT_PRICE_ETH2 },
+    { tickets: 3, lives: 3, price: UNIT_PRICE_ETH3 },
+    { tickets: 4, lives: 4, price: UNIT_PRICE_ETH4 },
+    { tickets: 5, lives: 5, price: UNIT_PRICE_ETH5 },
   ];
 
   // Logic: User cannot have more than 10 lives total
