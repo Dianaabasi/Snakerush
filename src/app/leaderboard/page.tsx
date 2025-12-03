@@ -76,7 +76,7 @@ export default function LeaderboardPage() {
   return (
     <div className="w-full flex flex-col items-center gap-6 text-center pb-24 relative">
       <div className="w-full flex justify-start px-4 pt-6">
-        <Link href="/"><div className="relative w-32 h-10"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div></Link>
+        <Link href="/"><div className="relative w-38 h-16"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div></Link>
       </div>
 
       <div className="mt-0">
