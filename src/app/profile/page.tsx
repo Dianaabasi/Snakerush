@@ -4,30 +4,35 @@ import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
 import { doc, getDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getCurrentWeekID } from '@/lib/utils';
 import { User, Heart, Calendar, House, Trophy } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// --- DATE HELPER ---
+// --- DATE HELPER (UTC) ---
+// Ensures alignment with the GamePage's UTC storage logic
 const getWeekDates = () => {
   const current = new Date();
-  const week: { date: string, dayName: string, isToday: boolean }[] = [];
+  // We work in UTC to match the storage key format (YYYY-MM-DD from toISOString)
+  const day = current.getUTCDay(); // 0 (Sun) - 6 (Sat)
   
-  const day = current.getDay(); 
-  const diff = current.getDate() - day + (day === 0 ? -6 : 1); 
-  const monday = new Date(current.setDate(diff));
+  // Calculate UTC Monday
+  // If Sunday (0), minus 6 days. Else minus (day - 1)
+  const diff = day === 0 ? 6 : day - 1;
+  
+  const monday = new Date(current);
+  monday.setUTCDate(current.getUTCDate() - diff);
 
+  const week: { date: string, dayName: string, isToday: boolean }[] = [];
   const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const todayStr = new Date().toISOString().split('T')[0];
 
   for (let i = 0; i < 7; i++) {
     const nextDay = new Date(monday);
-    nextDay.setDate(monday.getDate() + i);
+    nextDay.setUTCDate(monday.getUTCDate() + i);
     
     const dateStr = nextDay.toISOString().split('T')[0];
-    const todayStr = new Date().toISOString().split('T')[0];
 
     week.push({
       date: dateStr,
@@ -46,7 +51,6 @@ export default function ProfilePage() {
   const [totalScore, setTotalScore] = useState(0);
   const [todayScore, setTodayScore] = useState(0);
   
-  // FIX: Track Lives instead of Ticket
   const [lives, setLives] = useState(0);
 
   useEffect(() => {
@@ -66,11 +70,11 @@ export default function ProfilePage() {
 
       const fid = context.user.fid;
       const fidString = fid.toString();
+      
       const weekDates = getWeekDates();
       const todayStr = new Date().toISOString().split('T')[0];
 
       try {
-        // A. Listen for Realtime Lives (Replaces Ticket Check)
         const userRef = doc(db, 'users', fidString);
         
         // Initial Fetch for Scores
@@ -93,13 +97,11 @@ export default function ProfilePage() {
 
         // C. Build Stats
         let sum = 0;
-        let today = 0;
-
+        
+        // 1. Calculate Weekly Stats
         const stats: DayStat[] = weekDates.map(d => {
           const score = scoreMap.get(d.date) || 0;
           sum += score;
-          if (d.date === todayStr) today = score;
-
           return {
             dayName: d.dayName,
             date: d.date,
@@ -109,9 +111,12 @@ export default function ProfilePage() {
           };
         });
 
+        // 2. Explicitly Get Today's Score using the exact UTC key
+        const currentTodayScore = scoreMap.get(todayStr) || 0;
+
         setWeekStats(stats);
         setTotalScore(sum);
-        setTodayScore(today);
+        setTodayScore(currentTodayScore);
 
       } catch (err) {
         console.error("Error loading profile:", err);
@@ -155,7 +160,7 @@ export default function ProfilePage() {
         <p className="text-gray-500 text-xs font-mono">FID: {context?.user?.fid}</p>
       </div>
 
-      {/* FIX: LIVES STATUS BADGE (Replaces Ticket Badge) */}
+      {/* LIVES STATUS BADGE */}
       <div className={`
         flex items-center gap-2 px-6 py-2 rounded-full text-sm font-bold mb-8 border transition-all
         ${lives > 0 
