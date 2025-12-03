@@ -15,11 +15,11 @@ import ThemeToggle from '@/components/ThemeToggle';
 type FrameContext = Awaited<typeof sdk.context>;
 
 // CONFIG: Precise Unit Prices as requested
-const UNIT_PRICE_ETH1 = 0.00001; 
-const UNIT_PRICE_ETH2 = 0.00002; 
-const UNIT_PRICE_ETH3 = 0.00003; 
-const UNIT_PRICE_ETH4 = 0.00004; 
-const UNIT_PRICE_ETH5 = 0.00005; 
+const UNIT_PRICE_ETH1 = 0.00033; 
+const UNIT_PRICE_ETH2 = 0.00066; 
+const UNIT_PRICE_ETH3 = 0.00099; 
+const UNIT_PRICE_ETH4 = 0.0013; 
+const UNIT_PRICE_ETH5 = 0.0016; 
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
