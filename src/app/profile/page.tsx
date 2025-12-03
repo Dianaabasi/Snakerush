@@ -157,7 +157,6 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-black text-gray-900 dark:text-white">
           {context?.user?.displayName || "Player"}
         </h1>
-        <p className="text-gray-500 text-xs font-mono">FID: {context?.user?.fid}</p>
       </div>
 
       {/* LIVES STATUS BADGE */}
