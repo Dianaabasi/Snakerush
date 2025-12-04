@@ -49,9 +49,10 @@ import { type ReactNode, useState } from 'react';
 const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    injected(),        // Handles Farcaster (Warpcast) & Browser Wallets
+    injected(),
     coinbaseWallet({
       appName: 'SnakeRush',
+      headlessMode: true,
     }),
   ],
   transports: {

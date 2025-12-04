@@ -173,23 +173,13 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     return () => clearTimeout(timer);
   }, []);
 
-  // Auto-Connect for Farcaster Users
-  useEffect(() => {
-    if (isClient && !isConnected && fid && status === 'disconnected') {
-      const injected = connectors.find(c => c.id === 'injected');
-      if (injected) {
-        connect({ connector: injected });
-      }
-    }
-  }, [isClient, isConnected, fid, status, connectors, connect]);
-
   const calls = useMemo(() => {
     if (!DEV_WALLET) return [];
     return [
       {
         to: DEV_WALLET,
-        value: parseEther(ethPrice), 
-        data: '0x' as Hex, 
+        value: parseEther(ethPrice),
+        data: '0x' as Hex,
       },
     ];
   }, [DEV_WALLET, ethPrice]);
@@ -233,26 +223,44 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
   };
 
   const handleConnect = () => {
-    const coinbase = connectors.find(c => c.id === 'coinbaseWalletSDK');
-    const injected = connectors.find(c => c.id === 'injected');
+  interface WindowWithFarcaster extends Window {
+    farcaster?: {
+      request: (args: unknown) => Promise<unknown>;
+    };
+  }
 
-    // LOGIC: If on Farcaster (FID exists), force Injected connector.
-    if (fid && injected) {
-      console.log("Farcaster detected: Connecting with Injected Wallet...");
-      return connect({ connector: injected });
-    }
+  const isFarcaster =
+    typeof window !== "undefined" &&
+    (window as WindowWithFarcaster).farcaster &&
+    typeof (window as WindowWithFarcaster).farcaster?.request === "function";
 
-    // LOGIC: If on Base/Web (No FID), prefer Coinbase Smart Wallet.
-    if (coinbase) {
-      console.log("Base/Web detected: Connecting with Coinbase Wallet...");
-      return connect({ connector: coinbase });
-    }
+  const coinbase = connectors.find(c => c.id === "coinbaseWalletSDK");
+  const injected = connectors.find(c => c.id === "injected");
 
-    // Fallback
-    if (connectors.length > 0) {
-      connect({ connector: connectors[0] });
-    }
-  };
+  if (isFarcaster && coinbase) {
+    console.log("Connecting via Coinbase (Farcaster miniapp mode)...");
+    return connect({
+      connector: coinbase,
+      chainId: 8453,
+    });
+  }
+
+  if (injected) {
+    console.log("Connecting via Injected wallet...");
+    return connect({ connector: injected });
+  }
+
+  if (coinbase) {
+    console.log("Connecting via Coinbase Wallet...");
+    return connect({ connector: coinbase });
+  }
+
+  if (connectors.length > 0) {
+    console.log("Connecting via fallback connector...");
+    return connect({ connector: connectors[0] });
+  }
+};
+
 
   if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
 
@@ -278,8 +286,8 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
   return (
     <div className="w-full flex flex-col gap-2">
       <Transaction
-        chainId={8453} 
-        calls={calls} 
+        chainId={8453}
+        calls={calls}
         onError={handleError}
         onStatus={(status) => console.log('Tx Status:', status)}
         onSuccess={handleSuccess}
