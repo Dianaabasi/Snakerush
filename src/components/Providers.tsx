@@ -1,57 +1,16 @@
-// 'use client';
-
-// import { OnchainKitProvider } from '@coinbase/onchainkit';
-// import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-// import { base } from 'wagmi/chains'; // Base
-// import { WagmiProvider, createConfig, http } from 'wagmi';
-// import { coinbaseWallet, injected } from 'wagmi/connectors';
-// import { type ReactNode, useState } from 'react';
-
-// const wagmiConfig = createConfig({
-//   chains: [base],
-//   connectors: [
-//     injected(),
-//     coinbaseWallet({
-//       appName: 'SnakeRush',
-//     }),
-//   ],
-//   transports: {
-//     [base.id]: http(),
-//   },
-// });
-
-// export function Providers({ children }: { children: ReactNode }) {
-//   const [queryClient] = useState(() => new QueryClient());
-
-//   return (
-//     <WagmiProvider config={wagmiConfig}>
-//       <QueryClientProvider client={queryClient}>
-//         <OnchainKitProvider
-//           apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
-//           chain={base}
-//         >
-//           {children}
-//         </OnchainKitProvider>
-//       </QueryClientProvider>
-//     </WagmiProvider>
-//   );
-// }
-
 'use client';
 
 import { OnchainKitProvider } from '@coinbase/onchainkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { base } from 'wagmi/chains';
+import { base } from 'wagmi/chains'; // Base
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { coinbaseWallet, injected } from 'wagmi/connectors';
-import { farcasterWallet } from '@coinbase/onchainkit/wallet'; // 🟣 ADDED
 import { type ReactNode, useState } from 'react';
 
 const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    farcasterWallet(), // 🟣 REQUIRED FOR FARCASTER MINIAPPS
-    injected(),        // Browser wallets / Baseapp injected Coinbase
+    injected(),
     coinbaseWallet({
       appName: 'SnakeRush',
     }),
@@ -77,3 +36,44 @@ export function Providers({ children }: { children: ReactNode }) {
     </WagmiProvider>
   );
 }
+
+// 'use client';
+
+// import { OnchainKitProvider } from '@coinbase/onchainkit';
+// import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// import { base } from 'wagmi/chains';
+// import { WagmiProvider, createConfig, http } from 'wagmi';
+// import { coinbaseWallet, injected } from 'wagmi/connectors';
+// import { farcasterWallet } from '@coinbase/onchainkit/wallet'; // 🟣 ADDED
+// import { type ReactNode, useState } from 'react';
+
+// const wagmiConfig = createConfig({
+//   chains: [base],
+//   connectors: [
+//     farcasterWallet(), // 🟣 REQUIRED FOR FARCASTER MINIAPPS
+//     injected(),        // Browser wallets / Baseapp injected Coinbase
+//     coinbaseWallet({
+//       appName: 'SnakeRush',
+//     }),
+//   ],
+//   transports: {
+//     [base.id]: http(),
+//   },
+// });
+
+// export function Providers({ children }: { children: ReactNode }) {
+//   const [queryClient] = useState(() => new QueryClient());
+
+//   return (
+//     <WagmiProvider config={wagmiConfig}>
+//       <QueryClientProvider client={queryClient}>
+//         <OnchainKitProvider
+//           apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
+//           chain={base}
+//         >
+//           {children}
+//         </OnchainKitProvider>
+//       </QueryClientProvider>
+//     </WagmiProvider>
+//   );
+// }
