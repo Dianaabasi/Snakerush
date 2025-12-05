@@ -296,7 +296,7 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Game state refs
+  // Game state
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -304,20 +304,28 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const scoreRef = useRef(0);
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const obstaclesRef = useRef<Obstacle[]>([]);
+  const hasEatenFirstFood = useRef(false); // ← This brings back the green tint!
 
   // Speed control
-  const speedRef = useRef(250);                    // current interval in ms
-  const baseSpeedRef = useRef(250);                // speed when entering hard mode
-  const waitingForFirstMoveRef = useRef(false);    // true = hard mode started, waiting for input
+  const speedRef = useRef(250);
+  const baseSpeedRef = useRef(250);
+  const waitingForFirstMoveRef = useRef(false);
 
   const [score, setScore] = useState(0);
 
   // ──────────────────────────────────────────────────────────────
-  // Stable drawing function
+  // Draw (now includes initial green overlay)
   // ──────────────────────────────────────────────────────────────
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Background
     ctx.fillStyle = PALETTE.darkArcadeBlack;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Initial green tint until first food eaten
+    if (!hasEatenFirstFood.current && scoreRef.current === 0) {
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.07)';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
 
     // Grid
     ctx.strokeStyle = '#1E1E24';
@@ -332,11 +340,12 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     // Food
     ctx.fillStyle = PALETTE.dangerRed;
     const food = foodRef.current;
-    ctx.shadowBlur = 10; ctx.shadowColor = PALETTE.dangerRed;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = PALETTE.dangerRed;
     ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     ctx.shadowBlur = 0;
 
-    // Obstacles
+    // Obstacles (Hard Mode)
     ctx.fillStyle = '#666';
     obstaclesRef.current.forEach(obs => {
       ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
@@ -346,7 +355,8 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     snakeRef.current.forEach((segment, index) => {
       ctx.fillStyle = index === 0 ? PALETTE.neonSnekGreen : PALETTE.rushPurple;
       if (index === 0) {
-        ctx.shadowBlur = 15; ctx.shadowColor = PALETTE.neonSnekGreen;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = PALETTE.neonSnekGreen;
       }
       ctx.fillRect(segment.x * GRID_SIZE, segment.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
       ctx.shadowBlur = 0;
@@ -354,7 +364,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, []);
 
   // ──────────────────────────────────────────────────────────────
-  // Stable update logic
+  // Update logic
   // ──────────────────────────────────────────────────────────────
   const update = useCallback(() => {
     if (isPaused || waitingForFirstMoveRef.current) return;
@@ -364,6 +374,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     const dir = nextDirectionRef.current;
     directionRef.current = dir;
 
+    // Move
     switch (dir) {
       case 'UP': head.y -= 1; break;
       case 'DOWN': head.y += 1; break;
@@ -371,7 +382,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       case 'RIGHT': head.x += 1; break;
     }
 
-    // Wrap-around
+    // Wrap around
     const maxX = CANVAS_WIDTH / GRID_SIZE;
     const maxY = CANVAS_HEIGHT / GRID_SIZE;
     if (head.x < 0) head.x = maxX - 1;
@@ -379,15 +390,13 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (head.y < 0) head.y = maxY - 1;
     if (head.y >= maxY) head.y = 0;
 
-    // Self collision
+    // Collisions
     for (let i = 1; i < snake.length; i++) {
       if (head.x === snake[i].x && head.y === snake[i].y) {
         onGameOver(scoreRef.current);
         return;
       }
     }
-
-    // Obstacle collision (Hard Mode)
     if (phase === 'HARD') {
       for (const obs of obstaclesRef.current) {
         if (head.x === obs.x && head.y === obs.y) {
@@ -399,11 +408,18 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     snake.unshift(head);
 
-    // Food
+    // Food logic
     if (head.x === foodRef.current.x && head.y === foodRef.current.y) {
       const newScore = scoreRef.current + 10;
       scoreRef.current = newScore;
       setScore(newScore);
+
+      // Mark first food eaten → remove green tint
+      if (!hasEatenFirstFood.current) {
+        hasEatenFirstFood.current = true;
+      }
+
+      // Place new food
       foodRef.current = {
         x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
         y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
@@ -412,13 +428,14 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       // Speed increase every 50 points (15% faster)
       if (newScore % 50 === 0) {
         speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.85));
+        // Note: We do NOT restart loop here — only when speed actually changes on first move
       }
 
-      // Enter Hard Mode at 200
+      // Enter Hard Mode at exactly 200
       if (newScore === 200 && phase === 'NORMAL') {
-        onPhaseTransition();                    // show warning screen
-        baseSpeedRef.current = speedRef.current; // remember current speed
-        waitingForFirstMoveRef.current = true;   // pause until player moves
+        onPhaseTransition();
+        baseSpeedRef.current = speedRef.current;           // ← Save current speed
+        waitingForFirstMoveRef.current = true;
         if (gameLoopRef.current) clearInterval(gameLoopRef.current);
         return;
       }
@@ -430,7 +447,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, [isPaused, phase, onGameOver, onPhaseTransition]);
 
   // ──────────────────────────────────────────────────────────────
-  // Stable loop starter
+  // Game loop
   // ──────────────────────────────────────────────────────────────
   const restartLoop = useCallback(() => {
     if (gameLoopRef.current) {
@@ -449,12 +466,11 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, [update, draw]);
 
   // ──────────────────────────────────────────────────────────────
-  // Direction handler – triggers first move in Hard Mode
+  // Direction handler — THIS is where the 5% speed happens
   // ──────────────────────────────────────────────────────────────
   const handleDirection = useCallback((newDir: Direction) => {
     const currentDir = directionRef.current;
 
-    // Prevent 180° turns
     if (
       (newDir === 'UP' && currentDir === 'DOWN') ||
       (newDir === 'DOWN' && currentDir === 'UP') ||
@@ -464,16 +480,19 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     nextDirectionRef.current = newDir;
 
-    // First move after Hard Mode warning
+    // FIRST MOVE AFTER HARD MODE WARNING
     if (waitingForFirstMoveRef.current) {
       waitingForFirstMoveRef.current = false;
-      speedRef.current = Math.max(50, Math.floor(baseSpeedRef.current * 0.05)); // 5%
-      restartLoop();
+
+      // ←←← CRITICAL: Set to 5% of the speed at 200 points
+      speedRef.current = Math.max(50, Math.floor(baseSpeedRef.current * 0.05));
+
+      restartLoop(); // Now starts super slow
     }
   }, [restartLoop]);
 
   // ──────────────────────────────────────────────────────────────
-  // Touch / Swipe
+  // Touch, Keyboard, Obstacles, Pause, Init
   // ──────────────────────────────────────────────────────────────
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
@@ -483,7 +502,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (!touchStartRef.current) return;
     const dx = touchStartRef.current.x - e.touches[0].clientX;
     const dy = touchStartRef.current.y - e.touches[0].clientY;
-
     if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
       if (Math.abs(dx) > Math.abs(dy)) {
         handleDirection(dx > 0 ? 'LEFT' : 'RIGHT');
@@ -494,41 +512,30 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   };
 
-  // ──────────────────────────────────────────────────────────────
-  // Keyboard
-  // ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowUp': handleDirection('UP'); break;
-        case 'ArrowDown': handleDirection('DOWN'); break;
-        case 'ArrowLeft': handleDirection('LEFT'); break;
-        case 'ArrowRight': handleDirection('RIGHT'); break;
-      }
+      if (e.key === 'ArrowUp') handleDirection('UP');
+      if (e.key === 'ArrowDown') handleDirection('DOWN');
+      if (e.key === 'ArrowLeft') handleDirection('LEFT');
+      if (e.key === 'ArrowRight') handleDirection('RIGHT');
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Obstacles when entering Hard Mode
-  // ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
-      const newObs: Obstacle[] = [];
+      const obs: Obstacle[] = [];
       for (let i = 0; i < 5; i++) {
-        newObs.push({
+        obs.push({
           x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
           y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
         });
       }
-      obstaclesRef.current = newObs;
+      obstaclesRef.current = obs;
     }
   }, [phase]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Pause / Resume handling
-  // ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isPaused || waitingForFirstMoveRef.current) {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
@@ -537,12 +544,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [isPaused, restartLoop]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Initial start
-  // ──────────────────────────────────────────────────────────────
   useEffect(() => {
     speedRef.current = 250;
     baseSpeedRef.current = 250;
+    hasEatenFirstFood.current = false;
     restartLoop();
 
     return () => {
@@ -550,9 +555,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     };
   }, [restartLoop]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Render
-  // ──────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col items-center">
       <div className="flex justify-between w-full max-w-[360px] mb-4 font-mono text-xl font-bold">
@@ -562,7 +564,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         </div>
       </div>
 
-      <div className={`relative border-4 rounded-lg overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] 
+      <div className={`relative border-4 rounded-lg overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]
         ${phase === 'HARD' ? 'border-danger-red' : 'border-console-grey'}`}>
         <canvas
           ref={canvasRef}
@@ -575,7 +577,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       </div>
 
       <DirectionButtons onDirectionChange={handleDirection} onEndGame={() => onGameOver(scoreRef.current)} />
-
       <p className="mt-4 text-xs text-gray-500">Use D-Pad, Swipe, or Arrows</p>
     </div>
   );
