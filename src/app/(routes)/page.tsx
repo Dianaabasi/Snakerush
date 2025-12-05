@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-// ADDED: setDoc to save user profile
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
