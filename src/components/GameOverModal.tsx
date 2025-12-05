@@ -8,7 +8,7 @@ interface GameOverModalProps {
   isClaiming: boolean;
   onClaim: () => void;
   onReplay: () => void;
-  claimStatus: 'IDLE' | 'SUCCESS' | 'ERROR'; // To show feedback
+  claimStatus: 'IDLE' | 'SUCCESS' | 'ERROR';
 }
 
 export default function GameOverModal({ 
@@ -57,7 +57,12 @@ export default function GameOverModal({
 
           {/* REPLAY BUTTON */}
           <button
-            onClick={onReplay}
+            onClick={() => {
+              if (claimStatus === 'IDLE' && score > 0) {
+                onClaim();
+              }
+              onReplay();
+            }}
             className="w-full py-3 bg-transparent border-2 border-gray-600 text-gray-300 font-bold rounded-xl hover:bg-gray-800 hover:text-white transition-colors flex items-center justify-center gap-2"
           >
             <RefreshCcw size={18} />
@@ -67,6 +72,11 @@ export default function GameOverModal({
           {/* HOME BUTTON */}
           <Link 
             href="/"
+            onClick={() => {
+              if (claimStatus === 'IDLE' && score > 0) {
+                onClaim();
+              }
+            }}
             className="w-full py-3 bg-transparent border-2 border-gray-700 text-gray-400 font-bold rounded-xl hover:bg-gray-800 hover:text-white transition-colors flex items-center justify-center gap-2"
           >
             <House size={18} />

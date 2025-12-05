@@ -263,6 +263,8 @@ export default function HomePage() {
           </Link>
         </div>
       </nav>
+      
+      <p className="mt-4 font-bold text-gray-500">Built on base ⬜</p>
     </div>
   );
 }
