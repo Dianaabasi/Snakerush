@@ -296,7 +296,7 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Game state
+  // --- 1. Define Refs First (to avoid ordering issues) ---
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -304,24 +304,22 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const scoreRef = useRef(0);
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const obstaclesRef = useRef<Obstacle[]>([]);
-  const hasEatenFirstFood = useRef(false); // ← This brings back the green tint!
-
-  // Speed control
-  const speedRef = useRef(250);
-  const baseSpeedRef = useRef(250);
+  const hasEatenFirstFood = useRef(false);
+  const speedRef = useRef(300); // Start at 300ms
   const waitingForFirstMoveRef = useRef(false);
+  
+  // This ref holds the latest update function so restartLoop can call it
+  const updateRef = useRef<() => void>(() => {}); 
 
   const [score, setScore] = useState(0);
 
-  // ──────────────────────────────────────────────────────────────
-  // Draw (now includes initial green overlay)
-  // ──────────────────────────────────────────────────────────────
+  // --- 2. Draw Function ---
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
     // Background
     ctx.fillStyle = PALETTE.darkArcadeBlack;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Initial green tint until first food eaten
+    // Initial green tint
     if (!hasEatenFirstFood.current && scoreRef.current === 0) {
       ctx.fillStyle = 'rgba(0, 255, 100, 0.07)';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -345,7 +343,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     ctx.shadowBlur = 0;
 
-    // Obstacles (Hard Mode)
+    // Obstacles
     ctx.fillStyle = '#666';
     obstaclesRef.current.forEach(obs => {
       ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
@@ -363,9 +361,30 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     });
   }, []);
 
-  // ──────────────────────────────────────────────────────────────
-  // Update logic
-  // ──────────────────────────────────────────────────────────────
+  // --- 3. Restart Loop Function ---
+  // Defined BEFORE 'update' so 'update' can call it.
+  const restartLoop = useCallback(() => {
+    if (gameLoopRef.current) {
+      clearInterval(gameLoopRef.current);
+      gameLoopRef.current = null;
+    }
+
+    if (isPaused || waitingForFirstMoveRef.current) return;
+
+    gameLoopRef.current = setInterval(() => {
+      // Calls the latest version of update via ref
+      updateRef.current(); 
+      
+      // Draw frame
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) draw(ctx);
+      }
+    }, speedRef.current);
+  }, [isPaused, draw]);
+
+  // --- 4. Update Logic ---
   const update = useCallback(() => {
     if (isPaused || waitingForFirstMoveRef.current) return;
 
@@ -414,10 +433,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       scoreRef.current = newScore;
       setScore(newScore);
 
-      // Mark first food eaten → remove green tint
-      if (!hasEatenFirstFood.current) {
-        hasEatenFirstFood.current = true;
-      }
+      if (!hasEatenFirstFood.current) hasEatenFirstFood.current = true;
 
       // Place new food
       foodRef.current = {
@@ -425,49 +441,51 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
       };
 
-      // Speed increase every 50 points (15% faster)
-      if (newScore % 50 === 0) {
-        speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.85));
-        // Note: We do NOT restart loop here — only when speed actually changes on first move
+      // --- Speed Logic ---
+      let shouldRestart = false;
+
+      if (newScore > 0 && newScore % 50 === 0) {
+        if (newScore < 200) {
+            // Normal Mode: 15% Faster
+            speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.85));
+            shouldRestart = true;
+        } 
+        else if (newScore === 200) {
+            // Hard Mode Entry: 10% Slower (Pause imminent)
+            speedRef.current = Math.floor(speedRef.current * 1.10);
+        } 
+        else if (newScore > 200) {
+            // Hard Mode Progression: 10% Faster
+            speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.90));
+            shouldRestart = true;
+        }
       }
 
-      // Enter Hard Mode at exactly 200
+      // Hard Mode Transition Trigger
       if (newScore === 200 && phase === 'NORMAL') {
         onPhaseTransition();
-        baseSpeedRef.current = speedRef.current;           // ← Save current speed
         waitingForFirstMoveRef.current = true;
         if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-        return;
+        return; 
       }
+
+      if (shouldRestart) {
+        restartLoop();
+      }
+
     } else {
       snake.pop();
     }
 
     snakeRef.current = snake;
-  }, [isPaused, phase, onGameOver, onPhaseTransition]);
+  }, [isPaused, phase, onGameOver, onPhaseTransition, restartLoop]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Game loop
-  // ──────────────────────────────────────────────────────────────
-  const restartLoop = useCallback(() => {
-    if (gameLoopRef.current) {
-      clearInterval(gameLoopRef.current);
-      gameLoopRef.current = null;
-    }
+  // --- 5. Sync Update Ref ---
+  useEffect(() => {
+    updateRef.current = update;
+  }, [update]);
 
-    gameLoopRef.current = setInterval(() => {
-      update();
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) draw(ctx);
-      }
-    }, speedRef.current);
-  }, [update, draw]);
-
-  // ──────────────────────────────────────────────────────────────
-  // Direction handler — THIS is where the 5% speed happens
-  // ──────────────────────────────────────────────────────────────
+  // --- 6. Direction Control ---
   const handleDirection = useCallback((newDir: Direction) => {
     const currentDir = directionRef.current;
 
@@ -480,26 +498,24 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     nextDirectionRef.current = newDir;
 
-    // FIRST MOVE AFTER HARD MODE WARNING
+    // Hard Mode Resume Logic
     if (waitingForFirstMoveRef.current) {
       waitingForFirstMoveRef.current = false;
-
-      // ←←← CRITICAL: Set to 5% of the speed at 200 points
-      speedRef.current = Math.max(50, Math.floor(baseSpeedRef.current * 0.05));
-
-      restartLoop(); // Now starts super slow
+      restartLoop();
     }
   }, [restartLoop]);
 
-  // ──────────────────────────────────────────────────────────────
-  // Touch, Keyboard, Obstacles, Pause, Init
-  // ──────────────────────────────────────────────────────────────
+  // --- 7. Inputs (Touch/Key) ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
+    
+    // Disable swipe start for Hard Mode
+    if (waitingForFirstMoveRef.current) return;
+
     const dx = touchStartRef.current.x - e.touches[0].clientX;
     const dy = touchStartRef.current.y - e.touches[0].clientY;
     if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
@@ -523,6 +539,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
+  // --- 8. Initialization & Lifecycle ---
   useEffect(() => {
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
       const obs: Obstacle[] = [];
@@ -537,7 +554,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, [phase]);
 
   useEffect(() => {
-    if (isPaused || waitingForFirstMoveRef.current) {
+    if (isPaused) {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     } else {
       restartLoop();
@@ -545,15 +562,21 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, [isPaused, restartLoop]);
 
   useEffect(() => {
-    speedRef.current = 250;
-    baseSpeedRef.current = 250;
+    speedRef.current = 300;
     hasEatenFirstFood.current = false;
+    
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) draw(ctx);
+    }
+
     restartLoop();
 
     return () => {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     };
-  }, [restartLoop]);
+  }, []); // Run once on mount
 
   return (
     <div className="flex flex-col items-center">
