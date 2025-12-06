@@ -501,6 +501,7 @@ import { db } from '@/lib/firebase';
 import { User, Heart, Calendar, House, Trophy } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
+import Image from 'next/image';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
@@ -617,10 +618,11 @@ export default function ProfilePage() {
 
   return (
     <div className="w-full max-w-sm flex flex-col items-center pb-24">
+      
       <div className="flex flex-col items-center mt-6 mb-8">
-        <div className="w-20 h-20 rounded-full border-4 border-rush-purple overflow-hidden shadow-[0_0_20px_#8A2BE2] mb-3">
+        <div className="w-20 h-20 rounded-full border-4 border-rush-purple overflow-hidden shadow-[0_0_20px_#8A2BE2] mb-3 relative">
           {context?.user?.pfpUrl ? (
-            <img src={context.user.pfpUrl} alt="Profile" className="w-full h-full object-cover" />
+            <Image src={context.user.pfpUrl} alt="Profile" fill className="object-cover" />
           ) : (
             <div className="w-full h-full bg-gray-800 flex items-center justify-center">
               <User size={32} />
@@ -701,7 +703,7 @@ export default function ProfilePage() {
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-green-700 dark:border-neon-green flex items-center justify-center bg-gray-100 dark:bg-gray-800 shadow-[0_0_8px_rgba(57,255,20,0.5)]">
                {context?.user?.pfpUrl ? (
-                 <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
+                 <Image src={context.user.pfpUrl} alt="Me" width={24} height={24} className="w-full h-full object-cover" />
                ) : (
                  <User size={16} className="text-gray-500 dark:text-gray-400" />
                )}
