@@ -280,6 +280,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { PALETTE } from '@/styles/palette';
 import { type Direction, type GamePhase, type Point, type Obstacle } from '@/store/gameStore';
 import DirectionButtons from './DirectionButtons';
+import { Volume2, VolumeX } from 'lucide-react';
 
 interface GameCanvasProps {
   phase: GamePhase;
@@ -296,7 +297,7 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // --- 1. Define Refs First (to avoid ordering issues) ---
+  // --- 1. Define Refs First ---
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -308,9 +309,11 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const speedRef = useRef(300); // Start at 300ms
   const waitingForFirstMoveRef = useRef(false);
   
-  // This ref holds the latest update function so restartLoop can call it
   const updateRef = useRef<() => void>(() => {}); 
 
+  // --- Audio Refs & State ---
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const [score, setScore] = useState(0);
 
   // --- 2. Draw Function ---
@@ -362,7 +365,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, []);
 
   // --- 3. Restart Loop Function ---
-  // Defined BEFORE 'update' so 'update' can call it.
   const restartLoop = useCallback(() => {
     if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
@@ -372,10 +374,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (isPaused || waitingForFirstMoveRef.current) return;
 
     gameLoopRef.current = setInterval(() => {
-      // Calls the latest version of update via ref
       updateRef.current(); 
-      
-      // Draw frame
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -451,7 +450,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
             shouldRestart = true;
         } 
         else if (newScore === 200) {
-            // Hard Mode Entry: 10% Slower (Pause imminent)
+            // Hard Mode Entry: 10% Slower
             speedRef.current = Math.floor(speedRef.current * 1.10);
         } 
         else if (newScore > 200) {
@@ -512,8 +511,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
-    
-    // Disable swipe start for Hard Mode
     if (waitingForFirstMoveRef.current) return;
 
     const dx = touchStartRef.current.x - e.touches[0].clientX;
@@ -539,7 +536,63 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
-  // --- 8. Initialization & Lifecycle ---
+  // --- 8. Audio Logic ---
+  useEffect(() => {
+    // Select random soundtrack 1-5
+    const randomIndex = Math.floor(Math.random() * 5) + 1;
+    const audio = new Audio(`/sounds/bg-${randomIndex}.mp3`);
+    audio.loop = true;
+    audio.volume = 0.3; // Default volume 30%
+    audioRef.current = audio;
+
+    // Try to play automatically (might be blocked by browser until interaction)
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((error) => {
+        console.log("Audio play failed (waiting for interaction):", error);
+      });
+    }
+
+    return () => {
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, []);
+
+  // Handle Mute/Unmute
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isMuted) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(e => console.log("Audio play error:", e));
+      }
+    }
+  }, [isMuted]);
+
+  // Pause audio when game is paused or waiting
+  useEffect(() => {
+    if (!audioRef.current) return;
+    
+    if (isPaused || waitingForFirstMoveRef.current) {
+      audioRef.current.pause();
+    } else {
+      if (!isMuted) {
+        audioRef.current.play().catch(e => console.log("Resume audio error:", e));
+      }
+    }
+  }, [isPaused, isMuted]); // Note: waitingForFirstMoveRef is a ref, so we don't depend on it in useEffect, but the effect re-runs on other changes.
+  
+  // Explicitly handle resume when game loop restarts (covers the Hard Mode resume)
+  useEffect(() => {
+    if (!audioRef.current || isMuted) return;
+    if (!isPaused && !waitingForFirstMoveRef.current) {
+       audioRef.current.play().catch(() => {});
+    }
+  }, [score]); // Score change implies game is active/resumed
+
+
+  // --- 9. Initialization & Lifecycle ---
   useEffect(() => {
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
       const obs: Obstacle[] = [];
@@ -576,7 +629,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     };
-  }, []); // Run once on mount
+  }, []);
 
   return (
     <div className="flex flex-col items-center">
@@ -597,6 +650,15 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
         />
+        
+        {/* Sound Toggle Button */}
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className="absolute bottom-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm z-10"
+          aria-label={isMuted ? "Unmute sound" : "Mute sound"}
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
       </div>
 
       <DirectionButtons onDirectionChange={handleDirection} onEndGame={() => onGameOver(scoreRef.current)} />
