@@ -1,21 +1,20 @@
-import nextPlugin from 'eslint-plugin-next';
-import reactPlugin from 'eslint-plugin-react';
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import { FlatCompat } from "@eslint/eslintrc";
 
-export default [
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+const eslintConfig = [
+  ...compat.extends("next/core-web-vitals"),
+  ...compat.extends("next/typescript"),
   {
-    files: ['**/*.{js,jsx,ts,tsx}'],
-    plugins: {
-      react: reactPlugin,
-      '@next/next': nextPlugin,
-    },
-    rules: {
-      ...nextPlugin.configs.recommended.rules,
-      ...nextPlugin.configs['core-web-vitals'].rules,
-    },
-    languageOptions: {
-      globals: {
-        React: 'writable',
-      },
-    },
+    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
   },
 ];
+
+export default eslintConfig;
