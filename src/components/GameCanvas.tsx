@@ -297,7 +297,7 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // --- 1. Define Refs First ---
+  // --- 1. Define Refs First (to avoid ordering issues) ---
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -309,11 +309,13 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const speedRef = useRef(300); // Start at 300ms
   const waitingForFirstMoveRef = useRef(false);
   
+  // This ref holds the latest update function so restartLoop can call it
   const updateRef = useRef<() => void>(() => {}); 
 
   // --- Audio Refs & State ---
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+
   const [score, setScore] = useState(0);
 
   // --- 2. Draw Function ---
@@ -365,6 +367,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   }, []);
 
   // --- 3. Restart Loop Function ---
+  // Defined BEFORE 'update' so 'update' can call it.
   const restartLoop = useCallback(() => {
     if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
@@ -374,7 +377,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (isPaused || waitingForFirstMoveRef.current) return;
 
     gameLoopRef.current = setInterval(() => {
+      // Calls the latest version of update via ref
       updateRef.current(); 
+      
+      // Draw frame
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -450,7 +456,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
             shouldRestart = true;
         } 
         else if (newScore === 200) {
-            // Hard Mode Entry: 10% Slower
+            // Hard Mode Entry: 10% Slower (Pause imminent)
             speedRef.current = Math.floor(speedRef.current * 1.10);
         } 
         else if (newScore > 200) {
@@ -511,6 +517,8 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
+    
+    // Disable swipe start for Hard Mode
     if (waitingForFirstMoveRef.current) return;
 
     const dx = touchStartRef.current.x - e.touches[0].clientX;
@@ -536,7 +544,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
-  // --- 8. Audio Logic ---
+  // --- 8. Audio Logic (NEW) ---
   useEffect(() => {
     // Select random soundtrack 1-5
     const randomIndex = Math.floor(Math.random() * 5) + 1;
@@ -545,7 +553,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     audio.volume = 0.3; // Default volume 30%
     audioRef.current = audio;
 
-    // Try to play automatically (might be blocked by browser until interaction)
+    // Try to play automatically
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((error) => {
@@ -581,16 +589,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         audioRef.current.play().catch(e => console.log("Resume audio error:", e));
       }
     }
-  }, [isPaused, isMuted]); // Note: waitingForFirstMoveRef is a ref, so we don't depend on it in useEffect, but the effect re-runs on other changes.
-  
-  // Explicitly handle resume when game loop restarts (covers the Hard Mode resume)
-  useEffect(() => {
-    if (!audioRef.current || isMuted) return;
-    if (!isPaused && !waitingForFirstMoveRef.current) {
-       audioRef.current.play().catch(() => {});
-    }
-  }, [score]); // Score change implies game is active/resumed
-
+  }, [isPaused, isMuted, score]); // Re-check on score change (resuming)
 
   // --- 9. Initialization & Lifecycle ---
   useEffect(() => {
@@ -629,7 +628,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     };
-  }, []);
+  }, []); // Run once on mount
 
   return (
     <div className="flex flex-col items-center">
