@@ -299,7 +299,6 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // --- 1. Define Refs First ---
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -308,33 +307,29 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const obstaclesRef = useRef<Obstacle[]>([]);
   const hasEatenFirstFood = useRef(false);
-  const speedRef = useRef(300); // Start at 300ms
+  const speedRef = useRef(300);
   const waitingForFirstMoveRef = useRef(false);
   
   const updateRef = useRef<() => void>(() => {}); 
 
-  // --- Audio Refs & State ---
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [score, setScore] = useState(0);
 
   // --- Helper: Safe Random Point ---
   const getSafeRandomPoint = useCallback((): Point => {
-    let point: Point;
-    let isValid = false;
+    let point: Point = { x: 0, y: 0 };
     let attempts = 0;
-
-    // Try to find a valid point (limit attempts to prevent infinite loop)
-    while (!isValid && attempts < 100) {
+    
+    // We loop until we find a valid spot or hit max attempts
+    // ESLint fix: we don't need an 'isValid' variable, we just return when found
+    while (attempts < 100) {
       point = {
         x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
         y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
       };
 
-      // Check collisions with Snake
       const inSnake = snakeRef.current.some(s => s.x === point.x && s.y === point.y);
-      
-      // Check collisions with Obstacles
       const inObstacle = obstaclesRef.current.some(o => o.x === point.x && o.y === point.y);
 
       if (!inSnake && !inObstacle) {
@@ -342,23 +337,18 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       }
       attempts++;
     }
-    // Fallback if space is super tight (unlikely in this grid size)
-    return { x: 0, y: 0 }; 
+    return point; // Return whatever we have if we fail (unlikely)
   }, []);
 
-  // --- 2. Draw Function ---
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Background
     ctx.fillStyle = PALETTE.darkArcadeBlack;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Initial green tint
     if (!hasEatenFirstFood.current && scoreRef.current === 0) {
       ctx.fillStyle = 'rgba(0, 255, 100, 0.07)';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
 
-    // Grid
     ctx.strokeStyle = '#1E1E24';
     ctx.lineWidth = 1;
     for (let i = 0; i <= CANVAS_WIDTH; i += GRID_SIZE) {
@@ -368,7 +358,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CANVAS_WIDTH, i); ctx.stroke();
     }
 
-    // Food
     ctx.fillStyle = PALETTE.dangerRed;
     const food = foodRef.current;
     ctx.shadowBlur = 10;
@@ -376,13 +365,11 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     ctx.shadowBlur = 0;
 
-    // Obstacles
     ctx.fillStyle = '#666';
     obstaclesRef.current.forEach(obs => {
       ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
     });
 
-    // Snake
     snakeRef.current.forEach((segment, index) => {
       ctx.fillStyle = index === 0 ? PALETTE.neonSnekGreen : PALETTE.rushPurple;
       if (index === 0) {
@@ -394,7 +381,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     });
   }, []);
 
-  // --- 3. Restart Loop Function ---
   const restartLoop = useCallback(() => {
     if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
@@ -413,7 +399,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }, speedRef.current);
   }, [isPaused, draw]);
 
-  // --- 4. Update Logic ---
   const update = useCallback(() => {
     if (isPaused || waitingForFirstMoveRef.current) return;
 
@@ -422,7 +407,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     const dir = nextDirectionRef.current;
     directionRef.current = dir;
 
-    // Move
     switch (dir) {
       case 'UP': head.y -= 1; break;
       case 'DOWN': head.y += 1; break;
@@ -430,7 +414,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       case 'RIGHT': head.x += 1; break;
     }
 
-    // Wrap around
     const maxX = CANVAS_WIDTH / GRID_SIZE;
     const maxY = CANVAS_HEIGHT / GRID_SIZE;
     if (head.x < 0) head.x = maxX - 1;
@@ -438,7 +421,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (head.y < 0) head.y = maxY - 1;
     if (head.y >= maxY) head.y = 0;
 
-    // Collisions
     for (let i = 1; i < snake.length; i++) {
       if (head.x === snake[i].x && head.y === snake[i].y) {
         if (audioRef.current) audioRef.current.pause();
@@ -458,7 +440,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     snake.unshift(head);
 
-    // Food logic
     if (head.x === foodRef.current.x && head.y === foodRef.current.y) {
       const newScore = scoreRef.current + 10;
       scoreRef.current = newScore;
@@ -466,10 +447,9 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
       if (!hasEatenFirstFood.current) hasEatenFirstFood.current = true;
 
-      // Place new food (Safe spawn)
+      // Use safe spawn
       foodRef.current = getSafeRandomPoint();
 
-      // --- Speed Logic ---
       let shouldRestart = false;
 
       if (newScore > 0 && newScore % 50 === 0) {
@@ -486,7 +466,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         }
       }
 
-      // Hard Mode Transition
       if (newScore === 200 && phase === 'NORMAL') {
         onPhaseTransition();
         waitingForFirstMoveRef.current = true;
@@ -505,12 +484,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     snakeRef.current = snake;
   }, [isPaused, phase, onGameOver, onPhaseTransition, restartLoop, getSafeRandomPoint]);
 
-  // --- 5. Sync Update Ref ---
   useEffect(() => {
     updateRef.current = update;
   }, [update]);
 
-  // --- 6. Direction Control ---
   const handleDirection = useCallback((newDir: Direction) => {
     const currentDir = directionRef.current;
 
@@ -529,7 +506,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [restartLoop]);
 
-  // --- 7. Inputs ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -561,7 +537,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
-  // --- 8. Audio Logic ---
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * 5) + 1;
     const audio = new Audio(`/sounds/bg-${randomIndex}.mp3`);
@@ -604,7 +579,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [isPaused, isMuted, score]); 
 
-  // --- 9. Initialization ---
   useEffect(() => {
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
       const obs: Obstacle[] = [];
