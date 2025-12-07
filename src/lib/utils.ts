@@ -5,19 +5,29 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Helper to get the current Week ID (Sunday to Saturday)
+// Helper to get the current Week ID (Sunday start)
 export function getCurrentWeekID(): string {
   const now = new Date();
   const startOfYear = new Date(now.getFullYear(), 0, 1);
-  
-  // Calculate day of year
-  // (diff in ms) / ms_per_day
   const diff = now.getTime() - startOfYear.getTime() + ((startOfYear.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
   const oneDay = 1000 * 60 * 60 * 24;
   const dayOfYear = Math.floor(diff / oneDay);
-
-  // Week number logic (Sunday start)
   const weekNumber = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
-  
   return `${now.getFullYear()}-W${weekNumber}`;
+}
+
+// Helper to get all date strings (YYYY-MM-DD) for the current week (Sunday to Saturday)
+export function getWeekDates(): string[] {
+  const current = new Date();
+  const day = current.getDay(); // 0 (Sun) to 6 (Sat)
+  const diff = current.getDate() - day; // Go back to Sunday
+  const sunday = new Date(current.setDate(diff));
+
+  const weekDates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const nextDay = new Date(sunday);
+    nextDay.setDate(sunday.getDate() + i);
+    weekDates.push(nextDay.toISOString().split('T')[0]);
+  }
+  return weekDates;
 }

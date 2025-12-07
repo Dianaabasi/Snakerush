@@ -502,32 +502,9 @@ import { User, Heart, Calendar, House, Trophy } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getWeekDates } from '@/lib/utils'; // Use shared helper
 
 type FrameContext = Awaited<typeof sdk.context>;
-
-// --- DATE HELPER (Sunday Start) ---
-const getWeekDates = () => {
-  const current = new Date();
-  const day = current.getDay(); // 0 (Sun) to 6 (Sat)
-  const mondayDiff = current.getDate() - day; // Go back to Sunday
-  const sunday = new Date(current.setDate(mondayDiff));
-
-  const week: { date: string, dayName: string, isToday: boolean }[] = [];
-  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; // Sunday Start
-  const todayStr = new Date().toISOString().split('T')[0];
-
-  for (let i = 0; i < 7; i++) {
-    const nextDay = new Date(sunday);
-    nextDay.setDate(sunday.getDate() + i);
-    const dateStr = nextDay.toISOString().split('T')[0];
-    week.push({
-      date: dateStr,
-      dayName: dayNames[i],
-      isToday: dateStr === todayStr
-    });
-  }
-  return week;
-};
 
 export default function ProfilePage() {
   const [context, setContext] = useState<FrameContext>();
@@ -554,8 +531,11 @@ export default function ProfilePage() {
 
       const fid = context.user.fid;
       const fidString = fid.toString();
-      const weekDates = getWeekDates();
+      
+      // Use shared util to ensure dates match GamePage logic
+      const weekDateStrings = getWeekDates();
       const todayStr = new Date().toISOString().split('T')[0];
+      const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; 
 
       try {
         const userRef = doc(db, 'users', fidString);
@@ -576,15 +556,15 @@ export default function ProfilePage() {
         });
 
         let sum = 0;
-        const stats: DayStat[] = weekDates.map(d => {
-          const score = scoreMap.get(d.date) || 0;
+        const stats: DayStat[] = weekDateStrings.map((dateStr, index) => {
+          const score = scoreMap.get(dateStr) || 0;
           sum += score;
           return {
-            dayName: d.dayName,
-            date: d.date,
+            dayName: dayNames[index],
+            date: dateStr,
             score: score,
             played: score > 0,
-            isToday: d.isToday
+            isToday: dateStr === todayStr
           };
         });
 
@@ -608,12 +588,12 @@ export default function ProfilePage() {
     };
   }, [context]);
 
-  // Helper to determine status text
   const getStatusText = (dateStr: string, score: number) => {
     const today = new Date().toISOString().split('T')[0];
     if (dateStr > today) return 'Upcoming';
     if (score > 0) return 'Played';
-    return 'Missed';
+    if (dateStr < today) return 'Missed';
+    return 'Today'; 
   };
 
   if (loading) {

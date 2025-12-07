@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, runTransaction, getDoc, serverTimestamp, increment } from 'firebase/firestore'; 
+import { doc, runTransaction, getDoc, serverTimestamp, increment, getDocs, query, collection, where, documentId } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
 import GameOverModal from '@/components/GameOverModal';
-import { getCurrentWeekID } from '@/lib/utils';
+import { getCurrentWeekID, getWeekDates } from '@/lib/utils'; // Import shared helper
 import { Heart, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 
@@ -101,54 +101,64 @@ export default function GamePage() {
     setIsClaiming(true);
     
     const fidString = context.user.fid.toString();
-    const dateKey = new Date().toISOString().split('T')[0];
+    const todayKey = new Date().toISOString().split('T')[0];
     const currentWeekID = getCurrentWeekID(); 
+    const weekDates = getWeekDates(); // Get all date strings for this week
 
     const userRef = doc(db, 'users', fidString);
-    const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
+    const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', todayKey);
 
     try {
+        // 1. PRE-CALCULATE WEEKLY TOTAL (Read-only phase)
+        // Fetch all daily scores for this week to recalculate the accurate total
+        const scoresCollection = collection(db, 'users', fidString, 'dailyScores');
+        const q = query(scoresCollection, where(documentId(), 'in', weekDates));
+        const querySnapshot = await getDocs(q);
+        
+        let existingWeeklySum = 0;
+        querySnapshot.forEach(doc => {
+            // We exclude today's score from this sum because we'll handle today's update in the transaction
+            if (doc.id !== todayKey) {
+                existingWeeklySum += (doc.data().bestScore || 0);
+            }
+        });
+
+        // 2. TRANSACTION (Write phase)
         await runTransaction(db, async (t) => {
             const userDoc = await t.get(userRef);
             const dailyDoc = await t.get(dailyScoreRef);
             
             const userData = userDoc.data();
-            const lastWeek = userData?.lastActiveWeek || '';
-            let currentWeeklyScore = userData?.weeklyScore || 0;
-
-            // 1. Weekly Reset Check (Reset score if new week)
-            if (lastWeek !== currentWeekID) {
-                currentWeeklyScore = 0; 
-            }
-
-            // 2. Daily Score Logic
             const currentDailyBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
             
-            if (finalScore > currentDailyBest) {
-                const delta = finalScore - currentDailyBest;
-                currentWeeklyScore += delta;
+            // Determine the new best for today
+            const newDailyBest = Math.max(currentDailyBest, finalScore);
+            
+            // Calculate true weekly score: Sum of other days + New best for today
+            const trueWeeklyScore = existingWeeklySum + newDailyBest;
 
-                // Update Daily
+            if (finalScore > currentDailyBest) {
+                // Update Daily Score
                 t.set(dailyScoreRef, {
                     fid: context.user.fid,
-                    date: dateKey,
+                    date: todayKey,
                     bestScore: finalScore,
                     timestamp: serverTimestamp()
                 }, { merge: true });
             }
 
-            // 3. Always Update User (to set lastActiveWeek)
-            // This ensures they appear on the leaderboard even if score didn't improve
+            // Always update User Profile with the TRUE calculated sum
+            // This fixes any previous sync issues immediately
             t.set(userRef, {
-                weeklyScore: currentWeeklyScore,
+                weeklyScore: trueWeeklyScore,
                 lastActiveWeek: currentWeekID,
                 lastPlayedAt: serverTimestamp(),
-                // Keep profile synced
                 fid: context.user.fid,
                 username: context.user.username || userData?.username || `fid:${context.user.fid}`,
                 pfpUrl: context.user.pfpUrl || userData?.pfpUrl || ''
             }, { merge: true });
         });
+        
         setClaimStatus('SUCCESS');
     } catch (error) {
         console.error("Claim Error", error);
