@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'; 
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
@@ -13,7 +13,6 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// CONFIG: Precise Unit Prices as requested
 const UNIT_PRICE_ETH1 = 0.00001; 
 const UNIT_PRICE_ETH2 = 0.00002; 
 const UNIT_PRICE_ETH3 = 0.00003; 
@@ -42,8 +41,6 @@ export default function HomePage() {
         setIsSDKLoaded(true);
 
         if (ctx?.user?.fid) {
-          // -- SYNC USER PROFILE TO FIREBASE ---
-          // This ensures the username/pfp exists in the DB for the leaderboard to display
           const userRef = doc(db, 'users', ctx.user.fid.toString());
           await setDoc(userRef, {
             fid: ctx.user.fid,
@@ -74,7 +71,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // Explicit package definitions: 1 Ticket = 2 Lives
   const packages = [
     { tickets: 1, lives: 1, displayLives: 2, price: UNIT_PRICE_ETH1 },
     { tickets: 2, lives: 2, displayLives: 4, price: UNIT_PRICE_ETH2 },
@@ -83,12 +79,10 @@ export default function HomePage() {
     { tickets: 5, lives: 5, displayLives: 10, price: UNIT_PRICE_ETH5 },
   ];
 
-  // STRICT RULE: Total lives (current + purchase) cannot exceed 10.
   const canBuyPackage = (packageDisplayLives: number) => {
     return (lives + packageDisplayLives) <= 10;
   };
 
-  // Is store button disabled? (Only if lives is exactly 10 or 9, since min purchase is 2)
   const isStoreDisabled = lives >= 9;
 
   if (!isSDKLoaded) {
@@ -177,7 +171,6 @@ export default function HomePage() {
               <h2 className="text-2xl font-black text-white mb-1">TICKET STORE</h2>
               <p className="text-xs text-gray-400 mb-6">1 Ticket = 2 Lives</p>
 
-              {/* Render Package List if no package is selected */}
               {selectedPackage === null ? (
                 <div className="space-y-3">
                   {packages.map((pkg, idx) => {
@@ -207,7 +200,6 @@ export default function HomePage() {
                   })}
                 </div>
               ) : (
-                /* Render Transaction View if a package is selected */
                 <div className="animate-fade-in">
                   <div className="text-center mb-4">
                     <p className="text-gray-400">Buying</p>
@@ -254,7 +246,7 @@ export default function HomePage() {
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                {context?.user?.pfpUrl ? (
-                 <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
+                 <Image src={context.user.pfpUrl} alt="Me" width={24} height={24} className="w-full h-full object-cover" />
                ) : (
                  <User size={16} className="text-gray-500 dark:text-gray-400" />
                )}
@@ -264,7 +256,7 @@ export default function HomePage() {
         </div>
       </nav>
       
-      <p className="mt-4 font-bold text-gray-500">Built on base ⬜</p>
+      <p className="mt-8 mb-20 font-bold text-gray-500 text-sm">Built on base ⬜</p>
     </div>
   );
 }

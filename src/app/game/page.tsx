@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
 import { doc, runTransaction, getDoc, serverTimestamp, increment } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
@@ -27,36 +27,6 @@ export default function GamePage() {
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimStatus, setClaimStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
-  useEffect(() => {
-    const init = async () => {
-      const ctx = await sdk.context;
-      setContext(ctx);
-      sdk.actions.ready();
-
-      if (ctx?.user?.fid) {
-        await checkLivesAndStart(ctx.user.fid);
-      }
-    };
-    init();
-  }, []);
-
-  const checkLivesAndStart = async (fid: number) => {
-    const userRef = doc(db, 'users', fid.toString());
-    try {
-        const userSnap = await getDoc(userRef);
-        const currentLives = userSnap.exists() ? (userSnap.data().lives || 0) : 0;
-        setLives(currentLives);
-
-        if (currentLives <= 0) {
-            setGameState('NO_LIVES');
-        } else {
-            await startGameTransaction(fid);
-        }
-    } catch (e) {
-        console.error("Init Error:", e);
-    }
-  };
-
   const startGameTransaction = async (fid: number) => {
     const weekID = getCurrentWeekID();
     const userRef = doc(db, 'users', fid.toString());
@@ -81,6 +51,36 @@ export default function GamePage() {
       setGameState('NO_LIVES');
     }
   };
+
+  const checkLivesAndStart = useCallback(async (fid: number) => {
+    const userRef = doc(db, 'users', fid.toString());
+    try {
+        const userSnap = await getDoc(userRef);
+        const currentLives = userSnap.exists() ? (userSnap.data().lives || 0) : 0;
+        setLives(currentLives);
+
+        if (currentLives <= 0) {
+            setGameState('NO_LIVES');
+        } else {
+            await startGameTransaction(fid);
+        }
+    } catch (e) {
+        console.error("Init Error:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      const ctx = await sdk.context;
+      setContext(ctx);
+      sdk.actions.ready();
+
+      if (ctx?.user?.fid) {
+        await checkLivesAndStart(ctx.user.fid);
+      }
+    };
+    init();
+  }, [checkLivesAndStart]);
 
   const handleGameOver = (score: number) => {
     setFinalScore(score);
@@ -131,6 +131,15 @@ export default function GamePage() {
         setClaimStatus('ERROR');
     } finally {
         setIsClaiming(false);
+    }
+  };
+
+  const handleReplay = () => {
+    setGameResetKey(prev => prev + 1);
+    setGameState('LOADING');
+    // Re-check lives to start a new game
+    if (context?.user?.fid) {
+        checkLivesAndStart(context.user.fid);
     }
   };
 
@@ -201,7 +210,7 @@ export default function GamePage() {
                 score={finalScore}
                 isClaiming={isClaiming}
                 onClaim={handleClaim}
-                onReplay={() => window.location.reload()} 
+                onReplay={handleReplay} 
                 claimStatus={claimStatus}
             />
         )}

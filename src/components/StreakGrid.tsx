@@ -1,8 +1,8 @@
-import { Check, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 export interface DayStat {
-  dayName: string; // 'M', 'T', 'W', etc.
-  date: string;    // '2025-11-26'
+  dayName: string; 
+  date: string;    
   score: number;
   played: boolean;
   isToday: boolean;
@@ -49,4 +49,4 @@ export default function StreakGrid({ days }: StreakGridProps) {
       </div>
     </div>
   );
-}
+} 
