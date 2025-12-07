@@ -102,7 +102,7 @@ export default function GamePage() {
     
     const fidString = context.user.fid.toString();
     const dateKey = new Date().toISOString().split('T')[0];
-    const currentWeekID = getCurrentWeekID(); // Get current week ID
+    const currentWeekID = getCurrentWeekID(); 
 
     const userRef = doc(db, 'users', fidString);
     const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
@@ -113,36 +113,41 @@ export default function GamePage() {
             const dailyDoc = await t.get(dailyScoreRef);
             
             const userData = userDoc.data();
-            const currentBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
+            const lastWeek = userData?.lastActiveWeek || '';
+            let currentWeeklyScore = userData?.weeklyScore || 0;
 
-            if (finalScore > currentBest) {
-                const delta = finalScore - currentBest;
+            // 1. Weekly Reset Check (Reset score if new week)
+            if (lastWeek !== currentWeekID) {
+                currentWeeklyScore = 0; 
+            }
 
-                // --- WEEKLY RESET LOGIC ---
-                const lastWeek = userData?.lastActiveWeek || '';
-                let newWeeklyScore = userData?.weeklyScore || 0;
+            // 2. Daily Score Logic
+            const currentDailyBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
+            
+            if (finalScore > currentDailyBest) {
+                const delta = finalScore - currentDailyBest;
+                currentWeeklyScore += delta;
 
-                if (lastWeek !== currentWeekID) {
-                    // New week detected for this user: Reset score to 0, then add delta
-                    newWeeklyScore = delta; 
-                } else {
-                    // Same week: Add to existing score
-                    newWeeklyScore += delta;
-                }
-
+                // Update Daily
                 t.set(dailyScoreRef, {
                     fid: context.user.fid,
                     date: dateKey,
                     bestScore: finalScore,
                     timestamp: serverTimestamp()
                 }, { merge: true });
-
-                t.set(userRef, {
-                    weeklyScore: newWeeklyScore,
-                    lastActiveWeek: currentWeekID, // Update week tracker
-                    lastPlayedAt: serverTimestamp()
-                }, { merge: true });
             }
+
+            // 3. Always Update User (to set lastActiveWeek)
+            // This ensures they appear on the leaderboard even if score didn't improve
+            t.set(userRef, {
+                weeklyScore: currentWeeklyScore,
+                lastActiveWeek: currentWeekID,
+                lastPlayedAt: serverTimestamp(),
+                // Keep profile synced
+                fid: context.user.fid,
+                username: context.user.username || userData?.username || `fid:${context.user.fid}`,
+                pfpUrl: context.user.pfpUrl || userData?.pfpUrl || ''
+            }, { merge: true });
         });
         setClaimStatus('SUCCESS');
     } catch (error) {

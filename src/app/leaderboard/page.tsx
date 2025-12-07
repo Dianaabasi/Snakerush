@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, limit, doc, getDoc, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import sdk from '@farcaster/frame-sdk';
@@ -34,40 +34,46 @@ export default function LeaderboardPage() {
         setRewardPool(pool);
 
         const usersRef = collection(db, 'users');
-        // Added filter: Only fetch users active in the current week
+        
+        // FIX: Removed 'orderBy' and 'limit' to avoid Firestore Missing Index error.
+        // We fetch all active users for this week and sort client-side.
         const q = query(
             usersRef, 
-            where('lastActiveWeek', '==', weekID),
-            orderBy('weeklyScore', 'desc'), 
-            limit(20)
+            where('lastActiveWeek', '==', weekID)
         );
         
         const querySnapshot = await getDocs(q);
         
-        const data: LeaderboardEntry[] = [];
-        let rank = 1;
+        const allEntries: LeaderboardEntry[] = [];
 
         querySnapshot.forEach((doc) => {
           const userData = doc.data();
-          // Safety check: ensure score > 0
           if (userData.weeklyScore > 0) {
-            let earnings = 0;
-            if (rank <= 5) {
-                earnings = pool * REWARDS[rank - 1];
-            }
-
-            data.push({
+            allEntries.push({
               fid: userData.fid,
               username: userData.username || 'Unknown',
               pfpUrl: userData.pfpUrl || '',
               score: userData.weeklyScore || 0,
-              rank: rank++,
-              earnings: earnings > 0 ? earnings : undefined
+              rank: 0, // Calculated below
+              earnings: undefined
             });
           }
         });
 
-        setEntries(data);
+        // Client-side Sort
+        allEntries.sort((a, b) => b.score - a.score);
+
+        // Take Top 20 and Assign Ranks/Earnings
+        const top20 = allEntries.slice(0, 20).map((entry, index) => {
+          const rank = index + 1;
+          let earnings = 0;
+          if (rank <= 5) {
+             earnings = pool * REWARDS[rank - 1];
+          }
+          return { ...entry, rank, earnings: earnings > 0 ? earnings : undefined };
+        });
+
+        setEntries(top20);
       } catch (error) {
         console.error("Error fetching leaderboard:", error);
       } finally {
@@ -106,7 +112,7 @@ export default function LeaderboardPage() {
       {/* NAVBAR */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
-          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
+          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <House size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Home</span>
           </Link>
