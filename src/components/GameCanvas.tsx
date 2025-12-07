@@ -275,7 +275,7 @@
 // }
 
 
-/// 2222
+/// updated with sound
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -317,6 +317,34 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [score, setScore] = useState(0);
+
+  // --- Helper: Safe Random Point ---
+  const getSafeRandomPoint = useCallback((): Point => {
+    let point: Point;
+    let isValid = false;
+    let attempts = 0;
+
+    // Try to find a valid point (limit attempts to prevent infinite loop)
+    while (!isValid && attempts < 100) {
+      point = {
+        x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
+        y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
+      };
+
+      // Check collisions with Snake
+      const inSnake = snakeRef.current.some(s => s.x === point.x && s.y === point.y);
+      
+      // Check collisions with Obstacles
+      const inObstacle = obstaclesRef.current.some(o => o.x === point.x && o.y === point.y);
+
+      if (!inSnake && !inObstacle) {
+        return point;
+      }
+      attempts++;
+    }
+    // Fallback if space is super tight (unlikely in this grid size)
+    return { x: 0, y: 0 }; 
+  }, []);
 
   // --- 2. Draw Function ---
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -413,7 +441,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     // Collisions
     for (let i = 1; i < snake.length; i++) {
       if (head.x === snake[i].x && head.y === snake[i].y) {
-        // STOP AUDIO IMMEDIATELY ON GAME OVER
         if (audioRef.current) audioRef.current.pause();
         onGameOver(scoreRef.current);
         return;
@@ -422,7 +449,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (phase === 'HARD') {
       for (const obs of obstaclesRef.current) {
         if (head.x === obs.x && head.y === obs.y) {
-          // STOP AUDIO IMMEDIATELY ON GAME OVER
           if (audioRef.current) audioRef.current.pause();
           onGameOver(scoreRef.current);
           return;
@@ -440,33 +466,27 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
       if (!hasEatenFirstFood.current) hasEatenFirstFood.current = true;
 
-      // Place new food
-      foodRef.current = {
-        x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
-        y: Math.floor(Math.random() * (CANVAS_HEIGHT / GRID_SIZE)),
-      };
+      // Place new food (Safe spawn)
+      foodRef.current = getSafeRandomPoint();
 
       // --- Speed Logic ---
       let shouldRestart = false;
 
       if (newScore > 0 && newScore % 50 === 0) {
         if (newScore < 200) {
-            // Normal Mode: 15% Faster
             speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.85));
             shouldRestart = true;
         } 
         else if (newScore === 200) {
-            // Hard Mode Entry: 10% Slower (Pause imminent)
             speedRef.current = Math.floor(speedRef.current * 1.10);
         } 
         else if (newScore > 200) {
-            // Hard Mode Progression: 10% Faster
             speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.90));
             shouldRestart = true;
         }
       }
 
-      // Hard Mode Transition Trigger
+      // Hard Mode Transition
       if (newScore === 200 && phase === 'NORMAL') {
         onPhaseTransition();
         waitingForFirstMoveRef.current = true;
@@ -483,7 +503,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
 
     snakeRef.current = snake;
-  }, [isPaused, phase, onGameOver, onPhaseTransition, restartLoop]);
+  }, [isPaused, phase, onGameOver, onPhaseTransition, restartLoop, getSafeRandomPoint]);
 
   // --- 5. Sync Update Ref ---
   useEffect(() => {
@@ -503,22 +523,19 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     nextDirectionRef.current = newDir;
 
-    // Hard Mode Resume Logic
     if (waitingForFirstMoveRef.current) {
       waitingForFirstMoveRef.current = false;
       restartLoop();
     }
   }, [restartLoop]);
 
-  // --- 7. Inputs (Touch/Key) ---
+  // --- 7. Inputs ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
-    
-    // Disable swipe start for Hard Mode
     if (waitingForFirstMoveRef.current) return;
 
     const dx = touchStartRef.current.x - e.touches[0].clientX;
@@ -546,14 +563,12 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
   // --- 8. Audio Logic ---
   useEffect(() => {
-    // Select random soundtrack 1-5
     const randomIndex = Math.floor(Math.random() * 5) + 1;
     const audio = new Audio(`/sounds/bg-${randomIndex}.mp3`);
     audio.loop = true;
-    audio.volume = 0.3; // Default volume 30%
+    audio.volume = 0.3;
     audioRef.current = audio;
 
-    // Try to play automatically immediately
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((error) => {
@@ -567,7 +582,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     };
   }, []);
 
-  // Handle Mute/Unmute
   useEffect(() => {
     if (audioRef.current) {
       if (isMuted) {
@@ -578,7 +592,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [isMuted]);
 
-  // Pause audio when game is paused or waiting (excluding Game Over which is handled in update)
   useEffect(() => {
     if (!audioRef.current) return;
     
@@ -589,9 +602,9 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         audioRef.current.play().catch(e => console.log("Resume audio error:", e));
       }
     }
-  }, [isPaused, isMuted, score]);
+  }, [isPaused, isMuted, score]); 
 
-  // --- 9. Initialization & Lifecycle ---
+  // --- 9. Initialization ---
   useEffect(() => {
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
       const obs: Obstacle[] = [];
@@ -628,7 +641,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     };
-  }, []);
+  }, [draw, restartLoop]); 
 
   return (
     <div className="flex flex-col items-center">
@@ -639,7 +652,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         </div>
       </div>
 
-      {/* Game Area */}
       <div className={`relative border-4 rounded-lg overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]
         ${phase === 'HARD' ? 'border-danger-red' : 'border-console-grey'}`}>
         <canvas
@@ -650,13 +662,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
         />
-      </div>
-
-      {/* Sound Toggle Button (Below Canvas, Right Aligned) */}
-      <div className="w-full max-w-[360px] flex justify-end mt-2 px-1">
+        
         <button
           onClick={() => setIsMuted(!isMuted)}
-          className="p-2 bg-console-grey border border-gray-700 hover:border-gray-500 rounded-full text-gray-400 hover:text-white transition-all shadow-md"
+          className="absolute bottom-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm z-10"
           aria-label={isMuted ? "Unmute sound" : "Mute sound"}
         >
           {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}

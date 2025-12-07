@@ -102,16 +102,34 @@ export default function GamePage() {
     
     const fidString = context.user.fid.toString();
     const dateKey = new Date().toISOString().split('T')[0];
+    const currentWeekID = getCurrentWeekID(); // Get current week ID
+
     const userRef = doc(db, 'users', fidString);
     const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', dateKey);
 
     try {
         await runTransaction(db, async (t) => {
+            const userDoc = await t.get(userRef);
             const dailyDoc = await t.get(dailyScoreRef);
+            
+            const userData = userDoc.data();
             const currentBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
 
             if (finalScore > currentBest) {
                 const delta = finalScore - currentBest;
+
+                // --- WEEKLY RESET LOGIC ---
+                const lastWeek = userData?.lastActiveWeek || '';
+                let newWeeklyScore = userData?.weeklyScore || 0;
+
+                if (lastWeek !== currentWeekID) {
+                    // New week detected for this user: Reset score to 0, then add delta
+                    newWeeklyScore = delta; 
+                } else {
+                    // Same week: Add to existing score
+                    newWeeklyScore += delta;
+                }
+
                 t.set(dailyScoreRef, {
                     fid: context.user.fid,
                     date: dateKey,
@@ -120,7 +138,8 @@ export default function GamePage() {
                 }, { merge: true });
 
                 t.set(userRef, {
-                    weeklyScore: increment(delta),
+                    weeklyScore: newWeeklyScore,
+                    lastActiveWeek: currentWeekID, // Update week tracker
                     lastPlayedAt: serverTimestamp()
                 }, { merge: true });
             }
@@ -137,7 +156,6 @@ export default function GamePage() {
   const handleReplay = () => {
     setGameResetKey(prev => prev + 1);
     setGameState('LOADING');
-    // Re-check lives to start a new game
     if (context?.user?.fid) {
         checkLivesAndStart(context.user.fid);
     }

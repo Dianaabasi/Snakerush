@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, limit, doc, getDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import sdk from '@farcaster/frame-sdk';
@@ -28,15 +28,20 @@ export default function LeaderboardPage() {
         setContext(ctx); 
         sdk.actions.ready();
 
-        // 1. Get Reward Pool
         const weekID = getCurrentWeekID();
         const campaignSnap = await getDoc(doc(db, 'campaigns', weekID));
         const pool = campaignSnap.exists() ? (campaignSnap.data().poolTotal || 0) : 0;
         setRewardPool(pool);
 
-        // 2. Query Firestore
         const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy('weeklyScore', 'desc'), limit(20));
+        // Added filter: Only fetch users active in the current week
+        const q = query(
+            usersRef, 
+            where('lastActiveWeek', '==', weekID),
+            orderBy('weeklyScore', 'desc'), 
+            limit(20)
+        );
+        
         const querySnapshot = await getDocs(q);
         
         const data: LeaderboardEntry[] = [];
@@ -44,8 +49,8 @@ export default function LeaderboardPage() {
 
         querySnapshot.forEach((doc) => {
           const userData = doc.data();
+          // Safety check: ensure score > 0
           if (userData.weeklyScore > 0) {
-            // Calculate earnings for top 5
             let earnings = 0;
             if (rank <= 5) {
                 earnings = pool * REWARDS[rank - 1];
@@ -101,7 +106,7 @@ export default function LeaderboardPage() {
       {/* NAVBAR */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-50 transition-colors">
         <div className="max-w-md mx-auto flex justify-around items-center">
-          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px] group">
+          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
             <House size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
             <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Home</span>
           </Link>
@@ -112,7 +117,7 @@ export default function LeaderboardPage() {
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                {context?.user?.pfpUrl ? (
-                 <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
+                 <Image src={context.user.pfpUrl} alt="Me" width={24} height={24} className="w-full h-full object-cover" />
                ) : (
                  <User size={16} className="text-gray-500 dark:text-gray-400" />
                )}

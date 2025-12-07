@@ -501,23 +501,24 @@ import { db } from '@/lib/firebase';
 import { User, Heart, Calendar, House, Trophy } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
+import Image from 'next/image';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
+// --- DATE HELPER (Sunday Start) ---
 const getWeekDates = () => {
   const current = new Date();
-  const day = current.getUTCDay(); 
-  const diff = day === 0 ? 6 : day - 1;
-  const monday = new Date(current);
-  monday.setUTCDate(current.getUTCDate() - diff);
+  const day = current.getDay(); // 0 (Sun) to 6 (Sat)
+  const mondayDiff = current.getDate() - day; // Go back to Sunday
+  const sunday = new Date(current.setDate(mondayDiff));
 
   const week: { date: string, dayName: string, isToday: boolean }[] = [];
-  const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; // Sunday Start
   const todayStr = new Date().toISOString().split('T')[0];
 
   for (let i = 0; i < 7; i++) {
-    const nextDay = new Date(monday);
-    nextDay.setUTCDate(monday.getUTCDate() + i);
+    const nextDay = new Date(sunday);
+    nextDay.setDate(sunday.getDate() + i);
     const dateStr = nextDay.toISOString().split('T')[0];
     week.push({
       date: dateStr,
@@ -607,6 +608,14 @@ export default function ProfilePage() {
     };
   }, [context]);
 
+  // Helper to determine status text
+  const getStatusText = (dateStr: string, score: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (dateStr > today) return 'Upcoming';
+    if (score > 0) return 'Played';
+    return 'Missed';
+  };
+
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-green-700 dark:text-neon-green animate-pulse font-bold">
@@ -617,10 +626,11 @@ export default function ProfilePage() {
 
   return (
     <div className="w-full max-w-sm flex flex-col items-center pb-24">
+      
       <div className="flex flex-col items-center mt-6 mb-8">
-        <div className="w-20 h-20 rounded-full border-4 border-rush-purple overflow-hidden shadow-[0_0_20px_#8A2BE2] mb-3">
+        <div className="w-20 h-20 rounded-full border-4 border-rush-purple overflow-hidden shadow-[0_0_20px_#8A2BE2] mb-3 relative">
           {context?.user?.pfpUrl ? (
-            <img src={context.user.pfpUrl} alt="Profile" className="w-full h-full object-cover" />
+            <Image src={context.user.pfpUrl} alt="Profile" fill className="object-cover" />
           ) : (
             <div className="w-full h-full bg-gray-800 flex items-center justify-center">
               <User size={32} />
@@ -664,23 +674,35 @@ export default function ProfilePage() {
         </h3>
         
         <div className="space-y-2">
-          {weekStats.map((day) => (
-            <div 
-              key={day.date} 
-              className={`flex justify-between items-center p-3 rounded-lg border border-gray-800 
-                ${day.played ? 'bg-[#1E1E24]' : 'bg-gray-100 dark:bg-gray-900 opacity-60'}`}
-            >
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500">{day.date}</span>
-                <span className={`text-sm font-bold ${day.played ? 'text-white' : 'text-gray-500'}`}>
-                  {day.played ? 'Played' : 'Missed'}
-                </span>
+          {weekStats.map((day) => {
+            const status = getStatusText(day.date, day.score);
+            const isMissed = status === 'Missed';
+            const isUpcoming = status === 'Upcoming';
+
+            return (
+              <div 
+                key={day.date} 
+                className={`flex justify-between items-center p-3 rounded-lg border border-gray-800 
+                  ${day.played ? 'bg-[#1E1E24]' : 'bg-gray-100 dark:bg-gray-900 opacity-60'}
+                  ${isUpcoming ? 'opacity-30' : ''}
+                `}
+              >
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500">{day.date}</span>
+                  <span className={`text-sm font-bold 
+                    ${day.played ? 'text-white' : ''}
+                    ${isMissed ? 'text-red-500' : ''}
+                    ${isUpcoming ? 'text-gray-500' : ''}
+                  `}>
+                    {status}
+                  </span>
+                </div>
+                <div className="text-xl font-mono text-neon-green">
+                  {day.played ? day.score : '-'}
+                </div>
               </div>
-              <div className="text-xl font-mono text-neon-green">
-                {day.played ? day.score : 0}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -701,7 +723,7 @@ export default function ProfilePage() {
           <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
             <div className="w-6 h-6 rounded-full overflow-hidden border border-green-700 dark:border-neon-green flex items-center justify-center bg-gray-100 dark:bg-gray-800 shadow-[0_0_8px_rgba(57,255,20,0.5)]">
                {context?.user?.pfpUrl ? (
-                 <img src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
+                 <Image src={context.user.pfpUrl} alt="Me" className="w-full h-full object-cover" />
                ) : (
                  <User size={16} className="text-gray-500 dark:text-gray-400" />
                )}
