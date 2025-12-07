@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
 import GameOverModal from '@/components/GameOverModal';
-import { getCurrentWeekID, getWeekDates } from '@/lib/utils'; // Import shared helper
+import { getCurrentWeekID, getWeekDates } from '@/lib/utils';
 import { Heart, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,6 +45,8 @@ export default function GamePage() {
 
         setLives(currentLives - 1); 
       });
+      // FIX: Ensure phase is NORMAL when starting a new game
+      setGamePhase('NORMAL');
       setGameState('PLAYING');
     } catch (e) {
       console.error("Game Start Error:", e);
@@ -103,42 +105,33 @@ export default function GamePage() {
     const fidString = context.user.fid.toString();
     const todayKey = new Date().toISOString().split('T')[0];
     const currentWeekID = getCurrentWeekID(); 
-    const weekDates = getWeekDates(); // Get all date strings for this week
+    const weekDates = getWeekDates();
 
     const userRef = doc(db, 'users', fidString);
     const dailyScoreRef = doc(db, 'users', fidString, 'dailyScores', todayKey);
 
     try {
-        // 1. PRE-CALCULATE WEEKLY TOTAL (Read-only phase)
-        // Fetch all daily scores for this week to recalculate the accurate total
         const scoresCollection = collection(db, 'users', fidString, 'dailyScores');
         const q = query(scoresCollection, where(documentId(), 'in', weekDates));
         const querySnapshot = await getDocs(q);
         
         let existingWeeklySum = 0;
         querySnapshot.forEach(doc => {
-            // We exclude today's score from this sum because we'll handle today's update in the transaction
             if (doc.id !== todayKey) {
                 existingWeeklySum += (doc.data().bestScore || 0);
             }
         });
 
-        // 2. TRANSACTION (Write phase)
         await runTransaction(db, async (t) => {
             const userDoc = await t.get(userRef);
             const dailyDoc = await t.get(dailyScoreRef);
             
             const userData = userDoc.data();
             const currentDailyBest = dailyDoc.exists() ? dailyDoc.data().bestScore : 0;
-            
-            // Determine the new best for today
             const newDailyBest = Math.max(currentDailyBest, finalScore);
-            
-            // Calculate true weekly score: Sum of other days + New best for today
             const trueWeeklyScore = existingWeeklySum + newDailyBest;
 
             if (finalScore > currentDailyBest) {
-                // Update Daily Score
                 t.set(dailyScoreRef, {
                     fid: context.user.fid,
                     date: todayKey,
@@ -147,8 +140,6 @@ export default function GamePage() {
                 }, { merge: true });
             }
 
-            // Always update User Profile with the TRUE calculated sum
-            // This fixes any previous sync issues immediately
             t.set(userRef, {
                 weeklyScore: trueWeeklyScore,
                 lastActiveWeek: currentWeekID,
@@ -169,6 +160,8 @@ export default function GamePage() {
   };
 
   const handleReplay = () => {
+    // FIX: Reset Phase to NORMAL on Replay
+    setGamePhase('NORMAL'); 
     setGameResetKey(prev => prev + 1);
     setGameState('LOADING');
     if (context?.user?.fid) {
@@ -205,14 +198,11 @@ export default function GamePage() {
 
   return (
     <div className="relative w-full flex flex-col items-center">
-        
-        {/* CENTERED LIFE BAR */}
         <div className="mb-2 flex items-center gap-2 text-danger-red font-black bg-gray-900/50 px-4 py-1 rounded-full border border-gray-800">
             <Heart size={20} fill="currentColor" />
             <span className="text-lg">{lives} Lives</span>
         </div>
 
-        {/* CANVAS ENGINE */}
         <GameCanvas 
             key={gameResetKey} 
             phase={gamePhase} 
@@ -221,7 +211,6 @@ export default function GamePage() {
             isPaused={gameState === 'PAUSED'} 
         />
 
-        {/* TRANSITION MODAL */}
         {gameState === 'PAUSED' && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-50">
                 <div className="text-center p-6 bg-[#1E1E24] border-2 border-danger-red rounded-2xl w-64">
@@ -237,7 +226,6 @@ export default function GamePage() {
             </div>
         )}
 
-        {/* GAME OVER MODAL */}
         {gameState === 'OVER' && (
             <GameOverModal
                 score={finalScore}

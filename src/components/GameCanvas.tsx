@@ -299,7 +299,6 @@ const INITIAL_SNAKE: Point[] = [{ x: 10, y: 10 }];
 export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPaused }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // --- 1. Define Refs First (to avoid ordering issues) ---
   const snakeRef = useRef<Point[]>(INITIAL_SNAKE);
   const foodRef = useRef<Point>({ x: 15, y: 15 });
   const directionRef = useRef<Direction>('RIGHT');
@@ -308,24 +307,19 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const obstaclesRef = useRef<Obstacle[]>([]);
   const hasEatenFirstFood = useRef(false);
-  const speedRef = useRef(300); // Start at 300ms
+  const speedRef = useRef(300);
   const waitingForFirstMoveRef = useRef(false);
   
-  // This ref holds the latest update function so restartLoop can call it
   const updateRef = useRef<() => void>(() => {}); 
 
-  // --- Audio Refs & State ---
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-
   const [score, setScore] = useState(0);
 
-  // --- Helper: Safe Random Point ---
   const getSafeRandomPoint = useCallback((): Point => {
     let point: Point = { x: 0, y: 0 };
     let attempts = 0;
     
-    // We loop until we find a valid spot or hit max attempts
     while (attempts < 100) {
       point = {
         x: Math.floor(Math.random() * (CANVAS_WIDTH / GRID_SIZE)),
@@ -340,22 +334,18 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       }
       attempts++;
     }
-    return point; // Return whatever we have if we fail (unlikely)
+    return point;
   }, []);
 
-  // --- 2. Draw Function ---
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Background
     ctx.fillStyle = PALETTE.darkArcadeBlack;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Initial green tint
     if (!hasEatenFirstFood.current && scoreRef.current === 0) {
       ctx.fillStyle = 'rgba(0, 255, 100, 0.07)';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
 
-    // Grid
     ctx.strokeStyle = '#1E1E24';
     ctx.lineWidth = 1;
     for (let i = 0; i <= CANVAS_WIDTH; i += GRID_SIZE) {
@@ -365,7 +355,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CANVAS_WIDTH, i); ctx.stroke();
     }
 
-    // Food
     ctx.fillStyle = PALETTE.dangerRed;
     const food = foodRef.current;
     ctx.shadowBlur = 10;
@@ -373,13 +362,14 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     ctx.shadowBlur = 0;
 
-    // Obstacles
-    ctx.fillStyle = '#666';
-    obstaclesRef.current.forEach(obs => {
-      ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
-    });
+    // FIX: Only draw obstacles if phase is HARD AND score >= 200
+    if (phase === 'HARD' && scoreRef.current >= 200) {
+        ctx.fillStyle = '#666';
+        obstaclesRef.current.forEach(obs => {
+            ctx.fillRect(obs.x * GRID_SIZE, obs.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+        });
+    }
 
-    // Snake
     snakeRef.current.forEach((segment, index) => {
       ctx.fillStyle = index === 0 ? PALETTE.neonSnekGreen : PALETTE.rushPurple;
       if (index === 0) {
@@ -389,10 +379,8 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       ctx.fillRect(segment.x * GRID_SIZE, segment.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
       ctx.shadowBlur = 0;
     });
-  }, []);
+  }, [phase]); // Added phase dep
 
-  // --- 3. Restart Loop Function ---
-  // Defined BEFORE 'update' so 'update' can call it.
   const restartLoop = useCallback(() => {
     if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
@@ -402,10 +390,7 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (isPaused || waitingForFirstMoveRef.current) return;
 
     gameLoopRef.current = setInterval(() => {
-      // Calls the latest version of update via ref
       updateRef.current(); 
-      
-      // Draw frame
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -414,7 +399,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }, speedRef.current);
   }, [isPaused, draw]);
 
-  // --- 4. Update Logic ---
   const update = useCallback(() => {
     if (isPaused || waitingForFirstMoveRef.current) return;
 
@@ -423,7 +407,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     const dir = nextDirectionRef.current;
     directionRef.current = dir;
 
-    // Move
     switch (dir) {
       case 'UP': head.y -= 1; break;
       case 'DOWN': head.y += 1; break;
@@ -431,7 +414,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
       case 'RIGHT': head.x += 1; break;
     }
 
-    // Wrap around
     const maxX = CANVAS_WIDTH / GRID_SIZE;
     const maxY = CANVAS_HEIGHT / GRID_SIZE;
     if (head.x < 0) head.x = maxX - 1;
@@ -439,19 +421,18 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     if (head.y < 0) head.y = maxY - 1;
     if (head.y >= maxY) head.y = 0;
 
-    // Collisions
     for (let i = 1; i < snake.length; i++) {
       if (head.x === snake[i].x && head.y === snake[i].y) {
-        // Stop Sound immediately
         if (audioRef.current) audioRef.current.pause();
         onGameOver(scoreRef.current);
         return;
       }
     }
-    if (phase === 'HARD') {
+
+    // FIX: Only check obstacle collision if HARD mode AND score >= 200
+    if (phase === 'HARD' && scoreRef.current >= 200) {
       for (const obs of obstaclesRef.current) {
         if (head.x === obs.x && head.y === obs.y) {
-          // Stop Sound immediately
           if (audioRef.current) audioRef.current.pause();
           onGameOver(scoreRef.current);
           return;
@@ -461,7 +442,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     snake.unshift(head);
 
-    // Food logic
     if (head.x === foodRef.current.x && head.y === foodRef.current.y) {
       const newScore = scoreRef.current + 10;
       scoreRef.current = newScore;
@@ -469,30 +449,25 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
       if (!hasEatenFirstFood.current) hasEatenFirstFood.current = true;
 
-      // Place new food (Safe spawn)
       foodRef.current = getSafeRandomPoint();
 
-      // --- Speed Logic ---
       let shouldRestart = false;
 
       if (newScore > 0 && newScore % 50 === 0) {
         if (newScore < 200) {
-            // Normal Mode: 15% Faster
             speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.85));
             shouldRestart = true;
         } 
         else if (newScore === 200) {
-            // Hard Mode Entry: 10% Slower (Pause imminent)
             speedRef.current = Math.floor(speedRef.current * 1.10);
         } 
         else if (newScore > 200) {
-            // Hard Mode Progression: 10% Faster
             speedRef.current = Math.max(50, Math.floor(speedRef.current * 0.90));
             shouldRestart = true;
         }
       }
 
-      // Hard Mode Transition Trigger
+      // Hard Mode Transition: ONLY at 200
       if (newScore === 200 && phase === 'NORMAL') {
         onPhaseTransition();
         waitingForFirstMoveRef.current = true;
@@ -511,12 +486,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     snakeRef.current = snake;
   }, [isPaused, phase, onGameOver, onPhaseTransition, restartLoop, getSafeRandomPoint]);
 
-  // --- 5. Sync Update Ref ---
   useEffect(() => {
     updateRef.current = update;
   }, [update]);
 
-  // --- 6. Direction Control ---
   const handleDirection = useCallback((newDir: Direction) => {
     const currentDir = directionRef.current;
 
@@ -529,22 +502,18 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
 
     nextDirectionRef.current = newDir;
 
-    // Hard Mode Resume Logic
     if (waitingForFirstMoveRef.current) {
       waitingForFirstMoveRef.current = false;
       restartLoop();
     }
   }, [restartLoop]);
 
-  // --- 7. Inputs (Touch/Key) ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
-    
-    // Disable swipe start for Hard Mode
     if (waitingForFirstMoveRef.current) return;
 
     const dx = touchStartRef.current.x - e.touches[0].clientX;
@@ -570,16 +539,13 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     return () => window.removeEventListener('keydown', handler);
   }, [handleDirection]);
 
-  // --- 8. Audio Logic ---
   useEffect(() => {
-    // Select random soundtrack 1-5
     const randomIndex = Math.floor(Math.random() * 5) + 1;
     const audio = new Audio(`/sounds/bg-${randomIndex}.mp3`);
     audio.loop = true;
-    audio.volume = 0.3; // Default volume 30%
+    audio.volume = 0.3;
     audioRef.current = audio;
 
-    // Try to play automatically immediately
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((error) => {
@@ -593,7 +559,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     };
   }, []);
 
-  // Handle Mute/Unmute
   useEffect(() => {
     if (audioRef.current) {
       if (isMuted) {
@@ -604,7 +569,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [isMuted]);
 
-  // Pause audio when game is paused or waiting (excluding Game Over which is handled in update)
   useEffect(() => {
     if (!audioRef.current) return;
     
@@ -617,8 +581,10 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
     }
   }, [isPaused, isMuted, score]); 
 
-  // --- 9. Initialization & Lifecycle ---
+  // --- 9. Initialization ---
+  // FIX: Ensure obstacle generation logic doesn't fire prematurely
   useEffect(() => {
+    // Only generate if we are genuinely transitioning to Hard Mode
     if (phase === 'HARD' && obstaclesRef.current.length === 0) {
       const obs: Obstacle[] = [];
       for (let i = 0; i < 5; i++) {
@@ -628,6 +594,9 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         });
       }
       obstaclesRef.current = obs;
+    } else if (phase === 'NORMAL') {
+        // Reset obstacles if we are in normal mode (cleanup)
+        obstaclesRef.current = [];
     }
   }, [phase]);
 
@@ -677,7 +646,6 @@ export default function GameCanvas({ phase, onGameOver, onPhaseTransition, isPau
         />
       </div>
 
-      {/* Sound Toggle Button (Moved OUTSIDE canvas container, below right) */}
       <div className="w-full max-w-[360px] flex justify-end mt-2 px-1">
         <button
           onClick={() => setIsMuted(!isMuted)}
