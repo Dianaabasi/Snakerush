@@ -212,7 +212,6 @@ export default function HomePage() {
                       fid={context.user.fid}
                       livesToMint={packages[selectedPackage].lives}
                       ethPrice={packages[selectedPackage].price.toString()}
-                      context={context} /// Pass context for wallet connection
                       onSuccess={() => {
                         setIsStoreOpen(false);
                         setSelectedPackage(null);
