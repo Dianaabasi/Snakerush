@@ -139,38 +139,39 @@
 // }
 
 'use client';
-
 import { useMemo, useState, useEffect } from 'react';
-import { 
-  Transaction, 
-  TransactionButton, 
-  TransactionStatus, 
-  TransactionStatusLabel, 
+import {
+  Transaction,
+  TransactionButton,
+  TransactionStatus,
+  TransactionStatusLabel,
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
 import { type Address, type Hex, parseEther } from 'viem';
-import { useAccount, useConnect, useDisconnect } from 'wagmi'; 
+import { useAccount, useBalance, useConnect, useDisconnect } from 'wagmi';
 import { doc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { base } from 'wagmi/chains';
 
 interface TicketButtonProps {
   fid: number;
   livesToMint: number;
   ethPrice: string;
+  context?: any; // from farcaster/frame-sdk
   onSuccess: () => void;
 }
 
-export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: TicketButtonProps) {
-  const { address, isConnected, status } = useAccount(); 
-  const { connect, connectors } = useConnect(); 
+export default function TicketButton({ fid, livesToMint, ethPrice, context, onSuccess }: TicketButtonProps) {
+  const { address, isConnected, status } = useAccount();
+  const { data: balance } = useBalance({ address, chainId: base.id });
+  const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  
+
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsClient(true), 0);
-    return () => clearTimeout(timer);
+    setIsClient(true);
   }, []);
 
   const calls = useMemo(() => {
@@ -178,79 +179,39 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     return [
       {
         to: DEV_WALLET,
-        value: parseEther(ethPrice), 
-        data: '0x' as Hex, 
+        value: parseEther(ethPrice),
+        data: '0x' as Hex,
       },
     ];
   }, [DEV_WALLET, ethPrice]);
 
-  type OnchainSuccessResponse = {
-    transactionReceipts?: Array<{ transactionHash?: string }>;
-    transactionHash?: string;
-    [key: string]: unknown;
-  };
+  const required = parseEther(ethPrice);
+  const hasEnough = balance ? balance.value >= required : false;
 
-  const handleSuccess = async (response: OnchainSuccessResponse) => {
-    console.log('Transaction successful:', response);
-    const txHash = response?.transactionReceipts?.[0]?.transactionHash || 
-                   response?.transactionHash || 'pending';
-
+  const handleSuccess = async () => {
     const userRef = doc(db, 'users', fid.toString());
     const purchaseRef = doc(db, 'purchases', `${fid}_${Date.now()}`);
-
-    try {
-      await setDoc(purchaseRef, {
-        fid,
-        lives: livesToMint,
-        price: ethPrice,
-        txHash,
-        timestamp: serverTimestamp(),
-      });
-
-      await setDoc(userRef, {
-        lives: increment(livesToMint),
-        lastPurchase: serverTimestamp()
-      }, { merge: true });
-
-      onSuccess();
-    } catch (error) {
-      console.error('Error crediting lives:', error);
-    }
-  };
-
-  const handleError = (err: unknown) => {
-    console.error("Transaction Error:", err);
+    await setDoc(purchaseRef, { fid, lives: livesToMint, price: ethPrice, timestamp: serverTimestamp() });
+    await setDoc(userRef, { lives: increment(livesToMint), lastPurchase: serverTimestamp() }, { merge: true });
+    onSuccess();
   };
 
   const handleConnect = () => {
-    // Check if we are in Farcaster environment
-    // @ts-expect-error - farcaster might not be typed on window
-    const isFarcaster = typeof window !== 'undefined' && window.farcaster;
+    // Farcaster frames prefer injected (Warpcast browser wallet)
+    // Base app prefers Coinbase Smart Wallet
+    const isFarcaster = !!context?.client?.isFrame;
 
-    const coinbase = connectors.find(c => c.id === 'coinbaseWalletSDK');
-    const injected = connectors.find(c => c.id === 'injected');
-
-    if (isFarcaster && coinbase) {
-      // Force Coinbase Wallet SDK for Farcaster to trigger internal wallet
-      connect({ connector: coinbase });
-    } else if (injected) {
-      connect({ connector: injected });
-    } else if (coinbase) {
-      connect({ connector: coinbase });
-    } else if (connectors.length > 0) {
-      connect({ connector: connectors[0] });
+    if (isFarcaster) {
+      const injectedConn = connectors.find(c => c.id === 'injected');
+      if (injectedConn) return connect({ connector: injectedConn });
     }
+
+    const cbConn = connectors.find(c => c.id === 'coinbaseWalletSDK');
+    if (cbConn) connect({ connector: cbConn });
+    else if (connectors[0]) connect({ connector: connectors[0] });
   };
 
-  if (!isClient) return <div className="h-12 w-full bg-transparent"></div>;
-
-  if (status === 'reconnecting' || status === 'connecting') {
-    return (
-      <div className="w-full text-center py-2 animate-pulse text-neon-green font-bold text-sm">
-        Syncing...
-      </div>
-    );
-  }
+  if (!isClient) return null;
 
   if (!isConnected || !address) {
     return (
@@ -263,27 +224,34 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     );
   }
 
+  if (!hasEnough) {
+    return (
+      <button disabled className="w-full bg-gray-600 text-white font-bold py-3 rounded-lg opacity-70 cursor-not-allowed">
+        Insufficient Balance ({ethPrice} ETH needed)
+      </button>
+    );
+  }
+
   return (
     <div className="w-full flex flex-col gap-2">
       <Transaction
-        chainId={8453} 
-        calls={calls} 
-        onError={handleError}
-        onStatus={(status) => console.log('Tx Status:', status)}
+        chainId={8453}
+        calls={calls}
         onSuccess={handleSuccess}
+        onError={(e) => console.error(e)}
       >
-        <TransactionButton 
-          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all disabled:opacity-50"
-          text={`BUY ${livesToMint} LIVES (${ethPrice} ETH)`} 
+        <TransactionButton
+          className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all"
+          text={`BUY ${livesToMint} LIVES (${ethPrice} ETH)`}
         />
         <TransactionStatus>
           <TransactionStatusLabel />
           <TransactionStatusAction />
         </TransactionStatus>
       </Transaction>
-      
+
       <button onClick={() => disconnect()} className="text-[10px] text-gray-500 hover:text-red-400">
-        Reset Connection
+        Disconnect
       </button>
     </div>
   );

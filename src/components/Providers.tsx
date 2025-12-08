@@ -38,7 +38,6 @@
 // }
 
 'use client';
-
 import { OnchainKitProvider } from '@coinbase/onchainkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { base } from 'wagmi/chains';
@@ -49,10 +48,10 @@ import { type ReactNode, useState } from 'react';
 const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    injected(),
+    injected(), // ← Keep first so Farcaster prefers it
     coinbaseWallet({
       appName: 'SnakeRush',
-      headlessMode: true, // IMPORTANT: Helps with embedded frames/miniapps
+      preference: 'smartWalletOnly', // ← Important for Base app deep linking
     }),
   ],
   transports: {
@@ -62,7 +61,6 @@ const wagmiConfig = createConfig({
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
-
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
