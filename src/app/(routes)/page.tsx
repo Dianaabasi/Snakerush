@@ -13,11 +13,11 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-const UNIT_PRICE_ETH1 = 0.00001; 
-const UNIT_PRICE_ETH2 = 0.00002; 
-const UNIT_PRICE_ETH3 = 0.00003; 
-const UNIT_PRICE_ETH4 = 0.00004; 
-const UNIT_PRICE_ETH5 = 0.00005; 
+const UNIT_PRICE_ETH1 = 0.00035; 
+const UNIT_PRICE_ETH2 = 0.00068; 
+const UNIT_PRICE_ETH3 = 0.0010; 
+const UNIT_PRICE_ETH4 = 0.0013; 
+const UNIT_PRICE_ETH5 = 0.0016; 
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
