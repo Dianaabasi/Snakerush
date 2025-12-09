@@ -237,32 +237,6 @@ import { getWeekDates, getPreviousWeekID } from '@/lib/utils';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// --- DATE HELPER (Sunday Start) ---
-const getWeekDatesList = () => {
-  const current = new Date();
-  const day = current.getDay(); // 0 (Sun) to 6 (Sat)
-  const diff = current.getDate() - day; // Adjust to Sunday
-  const sunday = new Date(current.setDate(diff));
-
-  const week: { date: string, dayName: string, isToday: boolean }[] = [];
-  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-  const todayDate = new Date();
-  const todayStr = todayDate.toISOString().split('T')[0];
-
-  for (let i = 0; i < 7; i++) {
-    const nextDay = new Date(sunday);
-    nextDay.setDate(sunday.getDate() + i);
-    const dateStr = nextDay.toISOString().split('T')[0];
-    week.push({
-      date: dateStr,
-      dayName: dayNames[i],
-      isToday: dateStr === todayStr
-    });
-  }
-  return week;
-};
-
 export default function ProfilePage() {
   const [context, setContext] = useState<FrameContext>();
   const [loading, setLoading] = useState(true);
@@ -271,7 +245,6 @@ export default function ProfilePage() {
   const [todayScore, setTodayScore] = useState(0);
   const [lives, setLives] = useState(0);
   
-  // New State
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [canClaim, setCanClaim] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
@@ -294,8 +267,11 @@ export default function ProfilePage() {
 
       const fid = context.user.fid;
       const fidString = fid.toString();
-      const weekDates = getWeekDatesList();
+      
+      // FIX: Used the imported utility function 'getWeekDates' directly
+      const weekDates = getWeekDates();
       const todayStr = new Date().toISOString().split('T')[0];
+      const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; // Aligns with Sunday start in utils
 
       try {
         const userRef = doc(db, 'users', fidString);
@@ -320,15 +296,15 @@ export default function ProfilePage() {
         });
 
         let sum = 0;
-        const stats: DayStat[] = weekDates.map(d => {
-          const score = scoreMap.get(d.date) || 0;
+        const stats: DayStat[] = weekDates.map((dateStr, index) => {
+          const score = scoreMap.get(dateStr) || 0;
           sum += score;
           return {
-            dayName: d.dayName,
-            date: d.date,
+            dayName: dayNames[index],
+            date: dateStr,
             score: score,
             played: score > 0,
-            isToday: d.isToday
+            isToday: dateStr === todayStr
           };
         });
 
@@ -343,13 +319,11 @@ export default function ProfilePage() {
         const isSunday = today.getDay() === 0;
         
         if (isSunday) {
-            // Check if user has already claimed for previous week
             const prevWeekID = getPreviousWeekID();
             const userSnap = await getDoc(userRef);
             const claimedWeeks = userSnap.exists() ? (userSnap.data().claimedWeeks || []) : [];
             
             if (!claimedWeeks.includes(prevWeekID)) {
-                // If not claimed, show button (API will verify rank)
                 setCanClaim(true);
             }
         }
@@ -384,7 +358,7 @@ export default function ProfilePage() {
 
         if (response.ok) {
             setClaimMessage(`Success! Sent ${data.amount} USDC.`);
-            setCanClaim(false); // Hide button
+            setCanClaim(false); 
         } else {
             setClaimMessage(data.error || 'Claim failed.');
         }
@@ -430,13 +404,11 @@ export default function ProfilePage() {
         </h1>
       </div>
 
-      {/* NEW: Total Earnings Badge */}
       <div className="mb-6 flex items-center gap-2 bg-yellow-900/30 border border-yellow-600 px-4 py-2 rounded-xl text-yellow-500 font-bold shadow-lg">
         <DollarSign size={18} />
         <span>Total Earnings: ${totalEarnings.toFixed(2)}</span>
       </div>
 
-      {/* NEW: CLAIM BUTTON (Only visible on Sunday if eligible) */}
       {canClaim && (
         <div className="w-full mb-6 animate-pulse">
             <button 
