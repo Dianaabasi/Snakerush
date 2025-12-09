@@ -274,10 +274,11 @@ import Image from 'next/image';
 import TicketButton from '@/components/TicketButton';
 import { House, Trophy, User, Heart, X, ShoppingCart } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
+import { useAccount } from 'wagmi'; // Added useAccount
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// CONFIG: Prices in USDC (1 USDC ≈ $1)
+// CONFIG: Prices in USDC
 const UNIT_PRICE_USDC1 = 1.00; 
 const UNIT_PRICE_USDC2 = 2.00; 
 const UNIT_PRICE_USDC3 = 3.00; 
@@ -287,6 +288,7 @@ const UNIT_PRICE_USDC5 = 5.00;
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<FrameContext>();
+  const { address } = useAccount(); // Get connected wallet address
   
   const [lives, setLives] = useState(0);
   const [rewardPool, setRewardPool] = useState(0);
@@ -307,11 +309,15 @@ export default function HomePage() {
 
         if (ctx?.user?.fid) {
           const userRef = doc(db, 'users', ctx.user.fid.toString());
+          
+          // Update user profile, including wallet address if available
           await setDoc(userRef, {
             fid: ctx.user.fid,
             username: ctx.user.username || `fid:${ctx.user.fid}`,
             displayName: ctx.user.displayName || '',
             pfpUrl: ctx.user.pfpUrl || '',
+            // Save wallet address for rewards
+            ...(address && { walletAddress: address }), 
           }, { merge: true });
 
           unsubscribeUser = onSnapshot(userRef, (doc) => {
@@ -334,7 +340,7 @@ export default function HomePage() {
       if (unsubscribeUser) unsubscribeUser();
       if (unsubscribePool) unsubscribePool();
     };
-  }, []);
+  }, [address]); // Re-run when address is available
 
   const packages = [
     { tickets: 1, lives: 1, displayLives: 2, price: UNIT_PRICE_USDC1 },
@@ -476,7 +482,6 @@ export default function HomePage() {
                     <TicketButton 
                       fid={context.user.fid}
                       livesToMint={packages[selectedPackage].lives}
-                      // Renamed prop for clarity, though it maps to the price logic
                       ethPrice={packages[selectedPackage].price.toString()}
                       onSuccess={() => {
                         setIsStoreOpen(false);
