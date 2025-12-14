@@ -34,15 +34,30 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No wallet linked. Please connect wallet on Home.' }, { status: 400 });
     }
 
-    // 2. Fetch Leaderboard for Previous Week
+    // 2. RECONSTRUCT LEADERBOARD
+    // We need to find the Top 5 scores for prevWeekID.
+    // Group A: Users who haven't played yet this week (lastActiveWeek == prevWeekID)
+    // Group B: Users who HAVE played this week (previousActiveWeek == prevWeekID)
+
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('lastActiveWeek', '==', prevWeekID));
-    const querySnapshot = await getDocs(q);
+    
+    const queryA = query(usersRef, where('lastActiveWeek', '==', prevWeekID));
+    const queryB = query(usersRef, where('previousActiveWeek', '==', prevWeekID));
+
+    const [snapshotA, snapshotB] = await Promise.all([getDocs(queryA), getDocs(queryB)]);
 
     const allEntries: { fid: number, score: number }[] = [];
-    querySnapshot.forEach((doc) => {
+
+    // Process Group A (Current score is the target score)
+    snapshotA.forEach((doc) => {
         const d = doc.data();
         allEntries.push({ fid: d.fid, score: d.weeklyScore || 0 });
+    });
+
+    // Process Group B (Archived score is the target score)
+    snapshotB.forEach((doc) => {
+        const d = doc.data();
+        allEntries.push({ fid: d.fid, score: d.previousWeeklyScore || 0 });
     });
 
     // Sort to determine rank
@@ -50,8 +65,13 @@ export async function POST(request: Request) {
 
     // Find User Rank
     const rankIndex = allEntries.findIndex(u => u.fid === fid);
+    
+    // Check eligibility (Top 5)
     if (rankIndex === -1 || rankIndex > 4) {
-        return NextResponse.json({ error: 'Not in Top 5 for last week.' }, { status: 400 });
+        return NextResponse.json({ 
+            error: 'Not in Top 5 for last week.', 
+            debug: { yourRank: rankIndex + 1, totalParticipants: allEntries.length } 
+        }, { status: 400 });
     }
 
     // 3. Calculate Reward
@@ -63,16 +83,22 @@ export async function POST(request: Request) {
     if (rewardAmount <= 0) return NextResponse.json({ error: 'No reward pool available.' }, { status: 400 });
 
     // 4. Send USDC (Server-Side Secure Transaction)
-    if (!process.env.DEV_WALLET_PRIVATE_KEY) {
+    const rawKey = process.env.DEV_WALLET_PRIVATE_KEY;
+    if (!rawKey) {
         return NextResponse.json({ error: 'Server config error (Missing Key)' }, { status: 500 });
     }
 
-    const account = privateKeyToAccount(`0x${process.env.DEV_WALLET_PRIVATE_KEY}`);
+    const formattedKey = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`;
+    // @ts-expect-error - key format
+    const account = privateKeyToAccount(formattedKey);
+    
     const client = createWalletClient({
       account,
       chain: base,
       transport: http()
     }).extend(publicActions);
+
+    console.log(`Sending ${rewardAmount} USDC to ${userData.walletAddress}`);
 
     const hash = await client.writeContract({
       address: USDC_ADDRESS,
@@ -84,7 +110,7 @@ export async function POST(request: Request) {
         outputs: [{ name: '', type: 'bool' }]
       }],
       functionName: 'transfer',
-      args: [userData.walletAddress, parseUnits(rewardAmount.toString(), 6)]
+      args: [userData.walletAddress, parseUnits(rewardAmount.toFixed(6), 6)]
     });
 
     // 5. Update Firebase
@@ -96,7 +122,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, txHash: hash, amount: rewardAmount });
 
   } catch (error) {
-    console.error("Claim Error:", error);
-    return NextResponse.json({ error: 'Server Error' }, { status: 500 });
+    console.error("Claim Error Details:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown Server Error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -140,14 +140,25 @@ export default function GamePage() {
                 }, { merge: true });
             }
 
+            // --- ARCHIVE LOGIC START ---
+            const lastWeek = userData?.lastActiveWeek || '';
+            const previousScore = userData?.weeklyScore || 0;
+            const isNewWeek = lastWeek && lastWeek !== currentWeekID;
+
             t.set(userRef, {
                 weeklyScore: trueWeeklyScore,
                 lastActiveWeek: currentWeekID,
                 lastPlayedAt: serverTimestamp(),
                 fid: context.user.fid,
                 username: context.user.username || userData?.username || `fid:${context.user.fid}`,
-                pfpUrl: context.user.pfpUrl || userData?.pfpUrl || ''
+                pfpUrl: context.user.pfpUrl || userData?.pfpUrl || '',
+                // Conditionally add archive fields if it's a new week
+                ...(isNewWeek ? {
+                    previousWeeklyScore: previousScore,
+                    previousActiveWeek: lastWeek
+                } : {})
             }, { merge: true });
+            // --- ARCHIVE LOGIC END ---
         });
         
         setClaimStatus('SUCCESS');
