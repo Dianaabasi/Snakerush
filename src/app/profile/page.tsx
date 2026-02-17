@@ -456,7 +456,7 @@ export default function ProfilePage() {
                     <Trophy size={24} /> 
                     {isClaiming ? 'PROCESSING...' : 'CLAIM WEEKLY POINTS'}
                 </span>
-                <span className="text-xs font-normal opacity-90">Based on last week's performance</span>
+                <span className="text-xs font-normal opacity-90">Based on last week`s performance</span>
             </button>
             {claimMessage && (
                 <p className="text-center mt-2 text-sm font-bold text-yellow-400">{claimMessage}</p>
