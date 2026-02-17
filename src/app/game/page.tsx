@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, runTransaction, getDoc, serverTimestamp, increment, getDocs, query, collection, where, documentId } from 'firebase/firestore'; 
+import { doc, runTransaction, getDoc, serverTimestamp, getDocs, query, collection, where, documentId } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { GamePhase } from '@/store/gameStore';
 import GameCanvas from '@/components/GameCanvas';
@@ -13,7 +13,7 @@ import Link from 'next/link';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-const POOL_CONTRIBUTION = 0.25;
+// Removed POOL_CONTRIBUTION constant since pool is fixed
 
 export default function GamePage() {
   const [context, setContext] = useState<FrameContext>();
@@ -28,9 +28,8 @@ export default function GamePage() {
   const [claimStatus, setClaimStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
   const startGameTransaction = async (fid: number) => {
-    const weekID = getCurrentWeekID();
+    // Removed campaignRef logic
     const userRef = doc(db, 'users', fid.toString());
-    const campaignRef = doc(db, 'campaigns', weekID);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -40,16 +39,18 @@ export default function GamePage() {
         const currentLives = userDoc.data().lives || 0;
         if (currentLives < 1) throw "Not enough lives";
 
+        // ONLY decrement lives. Do not write to campaigns.
         transaction.update(userRef, { lives: currentLives - 1 });
-        transaction.set(campaignRef, { poolTotal: increment(POOL_CONTRIBUTION) }, { merge: true });
-
+        
         setLives(currentLives - 1); 
       });
-      // FIX: Ensure phase is NORMAL when starting a new game
+      
       setGamePhase('NORMAL');
       setGameState('PLAYING');
     } catch (e) {
       console.error("Game Start Error:", e);
+      // Only show NO_LIVES if it was actually a lives error
+      // But for safety/fallback we keep this logic, or you could inspect 'e'
       setGameState('NO_LIVES');
     }
   };
@@ -68,6 +69,7 @@ export default function GamePage() {
         }
     } catch (e) {
         console.error("Init Error:", e);
+        setGameState('NO_LIVES'); // Fallback if init fails
     }
   }, []);
 
