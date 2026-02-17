@@ -227,13 +227,13 @@
 
 import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, collection, getDocs, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, collection, getDocs, onSnapshot, getDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { User, Heart, Calendar, House, Trophy, DollarSign } from 'lucide-react';
+import { User, Heart, Calendar, House, Trophy, Star } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getWeekDates, getPreviousWeekID } from '@/lib/utils';
+import { getWeekDates, getPreviousWeekID, getCurrentWeekID } from '@/lib/utils';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
@@ -245,10 +245,13 @@ export default function ProfilePage() {
   const [todayScore, setTodayScore] = useState(0);
   const [lives, setLives] = useState(0);
   
-  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [earnedSRP, setEarnedSRP] = useState(0);
   const [canClaim, setCanClaim] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimMessage, setClaimMessage] = useState('');
+  
+  // Rank State
+  const [userRank, setUserRank] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -268,10 +271,10 @@ export default function ProfilePage() {
       const fid = context.user.fid;
       const fidString = fid.toString();
       
-      // FIX: Used the imported utility function 'getWeekDates' directly
       const weekDates = getWeekDates();
+      const currentWeekID = getCurrentWeekID();
       const todayStr = new Date().toISOString().split('T')[0];
-      const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; // Aligns with Sunday start in utils
+      const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; 
 
       try {
         const userRef = doc(db, 'users', fidString);
@@ -283,15 +286,16 @@ export default function ProfilePage() {
           scoreMap.set(doc.id, doc.data().bestScore);
         });
 
-        // Realtime Listener for Lives & Earnings
+        // Realtime Listener for Lives & Earnings (Points)
         unsubscribeUser = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setLives(data.lives || 0);
-                setTotalEarnings(data.totalEarnings || 0);
+                // Use 'earnedSRP' field
+                setEarnedSRP(data.earnedSRP || 0);
             } else {
                 setLives(0);
-                setTotalEarnings(0);
+                setEarnedSRP(0);
             }
         });
 
@@ -313,6 +317,26 @@ export default function ProfilePage() {
         setWeekStats(stats);
         setTotalScore(sum);
         setTodayScore(currentTodayScore);
+
+        // --- FETCH RANK ---
+        // Fetch all users for current week to calculate rank client-side
+        // (For a miniapp with limited users, this is acceptable. For scale, use aggregation)
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('lastActiveWeek', '==', currentWeekID));
+        const rankSnap = await getDocs(q);
+        
+        const allScores: number[] = [];
+        rankSnap.forEach(doc => {
+            allScores.push(doc.data().weeklyScore || 0);
+        });
+        
+        // Sort descending
+        allScores.sort((a, b) => b - a);
+        const myRank = allScores.indexOf(sum) + 1;
+        
+        // If myRank is 0 (not found/score 0), hide or show '-'
+        setUserRank(sum > 0 ? myRank : null);
+
 
         // --- CHECK CLAIM ELIGIBILITY ---
         const today = new Date();
@@ -357,7 +381,7 @@ export default function ProfilePage() {
         const data = await response.json();
 
         if (response.ok) {
-            setClaimMessage(`Success! Sent ${data.amount} USDC.`);
+            setClaimMessage(`Success! Earned ${data.amount} SRP.`);
             setCanClaim(false); 
         } else {
             setClaimMessage(data.error || 'Claim failed.');
@@ -402,11 +426,23 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-black text-gray-900 dark:text-white">
           {context?.user?.displayName || "Player"}
         </h1>
+        {/* RANK DISPLAY */}
+        {userRank && (
+             <div className="mt-1 bg-gray-800 px-3 py-1 rounded-full border border-gray-600 flex items-center gap-2">
+                 <Trophy size={14} className="text-yellow-400" />
+                 <span className="text-sm font-bold text-white">Rank #{userRank}</span>
+             </div>
+        )}
       </div>
 
-      <div className="mb-6 flex items-center gap-2 bg-yellow-900/30 border border-yellow-600 px-4 py-2 rounded-xl text-yellow-500 font-bold shadow-lg">
-        <DollarSign size={18} />
-        <span>Total Earnings: ${totalEarnings.toFixed(2)}</span>
+      <div className="mb-6 flex flex-col items-center bg-yellow-900/30 border border-yellow-600 px-6 py-3 rounded-xl shadow-lg">
+        <div className="flex items-center gap-2 text-yellow-500 font-bold text-lg">
+            <Star size={20} fill="currentColor" />
+            <span>Earned Points: {earnedSRP.toFixed(2)} SRP</span>
+        </div>
+        <span className="text-[10px] text-gray-400 mt-1 italic">
+            *Points will be converted to token via Airdrop
+        </span>
       </div>
 
       {canClaim && (
@@ -418,9 +454,9 @@ export default function ProfilePage() {
             >
                 <span className="text-lg flex items-center gap-2">
                     <Trophy size={24} /> 
-                    {isClaiming ? 'PROCESSING...' : 'CLAIM WEEKLY REWARD'}
+                    {isClaiming ? 'PROCESSING...' : 'CLAIM WEEKLY POINTS'}
                 </span>
-                <span className="text-xs font-normal opacity-90">Expires in 24 hours</span>
+                <span className="text-xs font-normal opacity-90">Based on last week's performance</span>
             </button>
             {claimMessage && (
                 <p className="text-center mt-2 text-sm font-bold text-yellow-400">{claimMessage}</p>

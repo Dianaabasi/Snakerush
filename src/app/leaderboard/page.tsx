@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import sdk from '@farcaster/frame-sdk';
@@ -12,14 +12,14 @@ import { House, Trophy, User } from 'lucide-react';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
-// Reward Percentages
-const REWARDS = [0.35, 0.25, 0.20, 0.12, 0.08];
+// FIXED POOL
+const FIXED_POOL_SRP = 50000;
 
 export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [context, setContext] = useState<FrameContext>();
-  const [rewardPool, setRewardPool] = useState(0);
+  // const [rewardPool, setRewardPool] = useState(0); 
 
   useEffect(() => {
     const loadData = async () => {
@@ -29,14 +29,11 @@ export default function LeaderboardPage() {
         sdk.actions.ready();
 
         const weekID = getCurrentWeekID();
-        const campaignSnap = await getDoc(doc(db, 'campaigns', weekID));
-        const pool = campaignSnap.exists() ? (campaignSnap.data().poolTotal || 0) : 0;
-        setRewardPool(pool);
+        // Removed dynamic pool fetching, using FIXED_POOL_SRP
 
         const usersRef = collection(db, 'users');
         
-        // FIX: Removed 'orderBy' and 'limit' to avoid Firestore Missing Index error.
-        // We fetch all active users for this week and sort client-side.
+        // Fetch all active users for the current week
         const q = query(
             usersRef, 
             where('lastActiveWeek', '==', weekID)
@@ -54,7 +51,7 @@ export default function LeaderboardPage() {
               username: userData.username || 'Unknown',
               pfpUrl: userData.pfpUrl || '',
               score: userData.weeklyScore || 0,
-              rank: 0, // Calculated below
+              rank: 0, 
               earnings: undefined
             });
           }
@@ -63,17 +60,29 @@ export default function LeaderboardPage() {
         // Client-side Sort
         allEntries.sort((a, b) => b.score - a.score);
 
-        // Take Top 20 and Assign Ranks/Earnings
-        const top20 = allEntries.slice(0, 20).map((entry, index) => {
+        // 1. Determine Top 100
+        const top100 = allEntries.slice(0, 100);
+        
+        // 2. Calculate Total Score of Top 100
+        const totalTop100Score = top100.reduce((acc, curr) => acc + curr.score, 0);
+
+        // 3. Assign Ranks and Calculate Points Share
+        const rankedEntries = top100.map((entry, index) => {
           const rank = index + 1;
-          let earnings = 0;
-          if (rank <= 5) {
-             earnings = pool * REWARDS[rank - 1];
+          
+          let estimatedSRP = 0;
+          if (totalTop100Score > 0) {
+            estimatedSRP = (entry.score / totalTop100Score) * FIXED_POOL_SRP;
           }
-          return { ...entry, rank, earnings: earnings > 0 ? earnings : undefined };
+
+          return { 
+            ...entry, 
+            rank, 
+            earnings: estimatedSRP > 0 ? estimatedSRP : undefined 
+          };
         });
 
-        setEntries(top20);
+        setEntries(rankedEntries);
       } catch (error) {
         console.error("Error fetching leaderboard:", error);
       } finally {
@@ -95,7 +104,7 @@ export default function LeaderboardPage() {
           WEEKLY RANKINGS
         </h1>
         <div className="bg-gray-900 text-yellow-400 px-4 py-1 rounded-full text-sm font-bold inline-block mt-2 border border-yellow-600">
-            🏆 POOL: ${rewardPool.toFixed(2)}
+            🏆 POOL: 50,000 SRP
         </div>
       </div>
 
@@ -106,6 +115,7 @@ export default function LeaderboardPage() {
       ) : (
         <div className="w-full max-w-sm">
             <LeaderboardTable entries={entries} currentUserFid={context?.user?.fid} />
+            <p className="text-xs text-gray-500 mt-4">Only Top 100 players share the prize pool.</p>
         </div>
       )}
 

@@ -274,7 +274,7 @@ import Image from 'next/image';
 import TicketButton from '@/components/TicketButton';
 import { House, Trophy, User, Heart, X, ShoppingCart } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
-import { useAccount } from 'wagmi'; // Added useAccount
+import { useAccount } from 'wagmi'; 
 
 type FrameContext = Awaited<typeof sdk.context>;
 
@@ -288,17 +288,16 @@ const UNIT_PRICE_USDC5 = 5.00;
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<FrameContext>();
-  const { address } = useAccount(); // Get connected wallet address
+  const { address } = useAccount(); 
   
   const [lives, setLives] = useState(0);
-  const [rewardPool, setRewardPool] = useState(0);
+  // const [rewardPool, setRewardPool] = useState(0); // Removed dynamic pool
   
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
 
   useEffect(() => {
     let unsubscribeUser: () => void;
-    let unsubscribePool: () => void;
 
     const setupListeners = async () => {
       try {
@@ -310,23 +309,16 @@ export default function HomePage() {
         if (ctx?.user?.fid) {
           const userRef = doc(db, 'users', ctx.user.fid.toString());
           
-          // Update user profile, including wallet address if available
           await setDoc(userRef, {
             fid: ctx.user.fid,
             username: ctx.user.username || `fid:${ctx.user.fid}`,
             displayName: ctx.user.displayName || '',
             pfpUrl: ctx.user.pfpUrl || '',
-            // Save wallet address for rewards
             ...(address && { walletAddress: address }), 
           }, { merge: true });
 
           unsubscribeUser = onSnapshot(userRef, (doc) => {
             setLives(doc.exists() ? (doc.data().lives || 0) : 0);
-          });
-
-          const weekID = getCurrentWeekID();
-          unsubscribePool = onSnapshot(doc(db, 'campaigns', weekID), (doc) => {
-            setRewardPool(doc.exists() ? (doc.data().poolTotal || 0) : 0);
           });
         }
       } catch (err) {
@@ -338,9 +330,8 @@ export default function HomePage() {
 
     return () => {
       if (unsubscribeUser) unsubscribeUser();
-      if (unsubscribePool) unsubscribePool();
     };
-  }, [address]); // Re-run when address is available
+  }, [address]); 
 
   const packages = [
     { tickets: 1, lives: 1, displayLives: 2, price: UNIT_PRICE_USDC1 },
@@ -373,9 +364,10 @@ export default function HomePage() {
           <Image src="/logo.png" alt="SnakeRush Logo" fill className="object-contain drop-shadow-[0_0_15px_rgba(138,43,226,0.6)]" priority />
         </div>
         
+        {/* FIXED POOL DISPLAY */}
         <div className="bg-gradient-to-r from-yellow-600 to-yellow-800 text-white px-6 py-2 rounded-full font-black text-sm shadow-[0_0_15px_rgba(255,215,0,0.5)] flex items-center gap-2 mb-2">
           <Trophy size={16} />
-          <span>POOL: ${rewardPool.toFixed(2)}</span>
+          <span>POOL: 50,000 SRP</span>
         </div>
 
         <p className="text-gray-600 dark:text-gray-400 text-xs font-mono font-bold">
@@ -389,8 +381,8 @@ export default function HomePage() {
           <li>🎫 <strong>Buy Tickets</strong> to get Lives</li>
           <li>🕹️ <strong>Join Game</strong> (Costs 1 Life)</li>
           <li>📅 Get highest score for the <strong>Day</strong></li>
-          <li>🏆 Rank up <strong>Top 5 Weekly</strong></li>
-          <li>💰 <strong>Earn</strong> % of the Reward Pool</li>
+          <li>🏆 Rank up <strong>Top 100 Weekly</strong></li>
+          <li>💰 <strong>Earn</strong> Share of SRP Pool</li>
         </ul>
       </div>
 
