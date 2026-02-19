@@ -229,7 +229,7 @@ import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
 import { doc, collection, getDocs, onSnapshot, getDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { User, Heart, Calendar, House, Trophy, Star } from 'lucide-react';
+import { User, Heart, Calendar, Trophy, Star } from 'lucide-react';
 import StreakGrid, { type DayStat } from '@/components/StreakGrid';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -534,7 +534,7 @@ export default function ProfilePage() {
       </Link>
 
       <Navbar pfpUrl={context?.user?.pfpUrl} />
-      
+
     </div>
   );
 }

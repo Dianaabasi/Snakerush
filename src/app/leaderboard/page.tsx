@@ -8,7 +8,6 @@ import sdk from '@farcaster/frame-sdk';
 import LeaderboardTable, { type LeaderboardEntry } from '@/components/LeaderboardTable';
 import Link from 'next/link';
 import Image from 'next/image'; 
-import { House, Trophy, User } from 'lucide-react'; 
 import Navbar from '@/components/Navbar';
 
 type FrameContext = Awaited<typeof sdk.context>;
@@ -121,7 +120,7 @@ export default function LeaderboardPage() {
       )}
 
       <Navbar pfpUrl={context?.user?.pfpUrl} />
-      
+
     </div>
   );
 }
