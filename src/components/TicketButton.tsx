@@ -2,15 +2,15 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { 
-  Transaction, 
-  TransactionButton, 
-  TransactionStatus, 
-  TransactionStatusLabel, 
+import {
+  Transaction,
+  TransactionButton,
+  TransactionStatus,
+  TransactionStatusLabel,
   TransactionStatusAction,
 } from '@coinbase/onchainkit/transaction';
 import { type Address, parseUnits, encodeFunctionData } from 'viem';
-import { useAccount, useConnect, useDisconnect } from 'wagmi'; 
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { doc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import sdk from '@farcaster/frame-sdk'; // Import SDK
@@ -38,10 +38,10 @@ const erc20Abi = [
 ] as const;
 
 export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: TicketButtonProps) {
-  const { address, isConnected, status } = useAccount(); 
-  const { connect, connectors } = useConnect(); 
+  const { address, isConnected, status } = useAccount();
+  const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  
+
   const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET_ADDRESS as Address;
   const [isClient, setIsClient] = useState(false);
   const [isFarcaster, setIsFarcaster] = useState(false);
@@ -56,7 +56,7 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
         // If we have a user in context, we are in a Farcaster Frame
         if (context?.user && mounted) {
           setIsFarcaster(true);
-          
+
           // AUTO-CONNECT LOGIC
           if (!isConnected) {
             const injectedConnector = connectors.find(c => c.id === 'injected');
@@ -84,7 +84,7 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
     return [
       {
         to: USDC_ADDRESS,
-        value: BigInt(0), 
+        value: BigInt(0),
         data: encodeFunctionData({
           abi: erc20Abi,
           functionName: 'transfer',
@@ -102,8 +102,8 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
 
   const handleSuccess = async (response: OnchainSuccessResponse) => {
     console.log('Transaction successful:', response);
-    const txHash = response?.transactionReceipts?.[0]?.transactionHash || 
-                   response?.transactionHash || 'pending';
+    const txHash = response?.transactionReceipts?.[0]?.transactionHash ||
+      response?.transactionHash || 'pending';
 
     const userRef = doc(db, 'users', fid.toString());
     const purchaseRef = doc(db, 'purchases', `${fid}_${Date.now()}`);
@@ -178,22 +178,22 @@ export default function TicketButton({ fid, livesToMint, ethPrice, onSuccess }: 
   return (
     <div className="w-full flex flex-col gap-2">
       <Transaction
-        chainId={8453} 
-        calls={calls} 
+        chainId={8453}
+        calls={calls}
         onError={handleError}
         onStatus={(status) => console.log('Tx Status:', status)}
         onSuccess={handleSuccess}
       >
-        <TransactionButton 
+        <TransactionButton
           className="w-full bg-rush-purple hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-[0_0_15px_rgba(138,43,226,0.5)] transition-all disabled:opacity-50"
-          text={`BUY ${livesToMint} LIVES (${ethPrice} USDC)`} 
+          text={`BUY ${livesToMint} LIVES (${ethPrice} USDC)`}
         />
         <TransactionStatus>
           <TransactionStatusLabel />
           <TransactionStatusAction />
         </TransactionStatus>
       </Transaction>
-      
+
       <button onClick={() => disconnect()} className="text-[10px] text-gray-500 hover:text-red-400">
         Reset Connection
       </button>

@@ -275,15 +275,16 @@ import TicketButton from '@/components/TicketButton';
 import { House, Trophy, User, Heart, X, ShoppingCart } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
 import { useAccount } from 'wagmi'; 
+import Navbar from '@/components/Navbar';
 
 type FrameContext = Awaited<typeof sdk.context>;
 
 // CONFIG: Prices in USDC
-const UNIT_PRICE_USDC1 = 1.00; 
-const UNIT_PRICE_USDC2 = 2.00; 
-const UNIT_PRICE_USDC3 = 3.00; 
-const UNIT_PRICE_USDC4 = 4.00; 
-const UNIT_PRICE_USDC5 = 5.00; 
+const UNIT_PRICE_USDC1 = 0.198; 
+const UNIT_PRICE_USDC2 = 0.396; 
+const UNIT_PRICE_USDC3 = 0.594; 
+const UNIT_PRICE_USDC4 = 0.792; 
+const UNIT_PRICE_USDC5 = 0.99; 
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
@@ -495,29 +496,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* NAVBAR */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-console-grey/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-2 pb-4 z-40 transition-colors">
-        <div className="max-w-md mx-auto flex justify-around items-center">
-          <Link href="/" className="flex flex-col items-center gap-1 min-w-[60px]">
-            <House size={24} className="text-green-700 dark:text-neon-green drop-shadow-sm dark:drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]" />
-            <span className="text-[10px] font-bold text-green-700 dark:text-neon-green">Home</span>
-          </Link>
-          <Link href="/leaderboard" className="flex flex-col items-center gap-1 min-w-[60px] group">
-            <Trophy size={24} className="text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
-            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Rank</span>
-          </Link>
-          <Link href="/profile" className="flex flex-col items-center gap-1 min-w-[60px] group">
-            <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-400 dark:border-gray-500 group-hover:border-gray-900 dark:group-hover:border-white transition-colors flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-               {context?.user?.pfpUrl ? (
-                 <Image src={context.user.pfpUrl} alt="Me" width={24} height={24} className="w-full h-full object-cover" />
-               ) : (
-                 <User size={16} className="text-gray-500 dark:text-gray-400" />
-               )}
-            </div>
-            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Profile</span>
-          </Link>
-        </div>
-      </nav>
+      <Navbar pfpUrl={context?.user?.pfpUrl} />
       
       <p className="mt-8 mb-20 font-bold text-gray-500 text-sm">Built on base ⬜</p>
     </div>
