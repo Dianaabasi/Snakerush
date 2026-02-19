@@ -266,16 +266,16 @@
 
 import { useEffect, useState } from 'react';
 import sdk from '@farcaster/frame-sdk';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'; 
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore'; // Added getDoc
 import { db } from '@/lib/firebase';
 import { getCurrentWeekID } from '@/lib/utils';
 import Link from 'next/link';
 import Image from 'next/image'; 
 import TicketButton from '@/components/TicketButton';
-import { House, Trophy, User, Heart, X, ShoppingCart } from 'lucide-react'; 
+import { Trophy, Heart, X, ShoppingCart } from 'lucide-react'; 
 import ThemeToggle from '@/components/ThemeToggle'; 
 import { useAccount } from 'wagmi'; 
-import Navbar from '@/components/Navbar';
+import Navbar from '@/components/Navbar'; // Implements the new Tabs (Home, Rank, Mint, Swap, Profile)
 
 type FrameContext = Awaited<typeof sdk.context>;
 
@@ -284,7 +284,7 @@ const UNIT_PRICE_USDC1 = 0.198;
 const UNIT_PRICE_USDC2 = 0.396; 
 const UNIT_PRICE_USDC3 = 0.594; 
 const UNIT_PRICE_USDC4 = 0.792; 
-const UNIT_PRICE_USDC5 = 0.99; 
+const UNIT_PRICE_USDC5 = 0.99;
 
 export default function HomePage() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
@@ -292,7 +292,6 @@ export default function HomePage() {
   const { address } = useAccount(); 
   
   const [lives, setLives] = useState(0);
-  // const [rewardPool, setRewardPool] = useState(0); // Removed dynamic pool
   
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
@@ -310,14 +309,31 @@ export default function HomePage() {
         if (ctx?.user?.fid) {
           const userRef = doc(db, 'users', ctx.user.fid.toString());
           
-          await setDoc(userRef, {
-            fid: ctx.user.fid,
-            username: ctx.user.username || `fid:${ctx.user.fid}`,
-            displayName: ctx.user.displayName || '',
-            pfpUrl: ctx.user.pfpUrl || '',
-            ...(address && { walletAddress: address }), 
-          }, { merge: true });
+          // 1. CHECK IF USER EXISTS
+          const userSnap = await getDoc(userRef);
 
+          if (!userSnap.exists()) {
+            // --- NEW USER: Create with 5 Default Lives ---
+            await setDoc(userRef, {
+              fid: ctx.user.fid,
+              username: ctx.user.username || `fid:${ctx.user.fid}`,
+              displayName: ctx.user.displayName || '',
+              pfpUrl: ctx.user.pfpUrl || '',
+              lives: 5, // <--- DEFAULT LIVES ALLOCATION
+              ...(address && { walletAddress: address }), 
+            });
+          } else {
+            // --- EXISTING USER: Update profile only (Don't reset lives) ---
+            await setDoc(userRef, {
+              fid: ctx.user.fid,
+              username: ctx.user.username || `fid:${ctx.user.fid}`,
+              displayName: ctx.user.displayName || '',
+              pfpUrl: ctx.user.pfpUrl || '',
+              ...(address && { walletAddress: address }), 
+            }, { merge: true });
+          }
+
+          // 2. LISTEN FOR UPDATES
           unsubscribeUser = onSnapshot(userRef, (doc) => {
             setLives(doc.exists() ? (doc.data().lives || 0) : 0);
           });
@@ -496,6 +512,7 @@ export default function HomePage() {
         </div>
       )}
 
+      
       <Navbar pfpUrl={context?.user?.pfpUrl} />
       
       <p className="mt-8 mb-20 font-bold text-gray-500 text-sm">Built on base ⬜</p>
